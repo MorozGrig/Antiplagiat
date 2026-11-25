@@ -23,6 +23,7 @@ from typing import Optional
 from uuid import UUID, uuid4
 
 from fastapi import UploadFile
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -152,7 +153,7 @@ async def register_material(
     s = settings or get_settings()
 
     # 1. Хэш + размер (стриминг, без хранения всего файла в памяти)
-    hash_res: HashResult = compute_sha256_from_stream(upload.file)
+    hash_res: HashResult = await run_in_threadpool(compute_sha256_from_stream, upload.file)
     content_type = (upload.content_type or "application/octet-stream").split(";")[0].strip()
 
     # 2. Валидации
@@ -188,7 +189,8 @@ async def register_material(
         filename=upload.filename,
     )
     upload.file.seek(0)
-    storage.upload_fileobj(
+    await run_in_threadpool(
+        storage.upload_fileobj,
         upload.file,
         key=object_key,
         content_type=content_type,
@@ -242,7 +244,7 @@ async def register_material(
     except Exception:
         # The object was uploaded before the DB insert; avoid orphaned files.
         try:
-            storage.delete_object(key=object_key, bucket=storage.bucket_files)
+            await run_in_threadpool(\n                storage.delete_object, key=object_key, bucket=storage.bucket_files\n            )
         except Exception:
             import logging
             logging.getLogger(__name__).exception(
