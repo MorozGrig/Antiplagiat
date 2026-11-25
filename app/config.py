@@ -8,7 +8,7 @@ ELASTICSEARCH_URL, MAX_FILE_SIZE и т.д.
 from functools import lru_cache
 from typing import List, Optional
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -151,6 +151,20 @@ class Settings(BaseSettings):
     @property
     def result_backend(self) -> str:
         return self.celery_result_backend or self.redis_url
+
+    @model_validator(mode="after")
+    def validate_production_secrets(self):
+        """Fail fast instead of booting production with development credentials."""
+        if self.environment.lower() == "production":
+            if self.secret_key == "change-me-in-production" or len(self.secret_key) < 32:
+                raise ValueError("В production необходимо задать SECRET_KEY длиной не менее 32 символов")
+            if self.postgres_password == "registry":
+                raise ValueError("В production необходимо изменить POSTGRES_PASSWORD")
+            if self.s3_secret_key == "minioadmin":
+                raise ValueError("В production необходимо изменить S3_SECRET_KEY")
+            if "*" in self.cors_origins:
+                raise ValueError("В production нельзя использовать CORS_ORIGINS=*")
+        return self
 
     @field_validator("cors_origins", mode="before")
     @classmethod
