@@ -50,9 +50,7 @@ async def create_material(
 ) -> MaterialRegistrationResponse:
     """Register file, reject exact SHA-256 duplicates, then enqueue processing.
 
-    Authentication is not wired in the current project snapshot. Until an
-    auth dependency is implemented, author_id is supplied explicitly as form
-    data; the database FK remains the final check that this user exists.
+    The author is always derived from the authenticated JWT subject.
     """
     if not file.filename:
         raise HTTPException(
