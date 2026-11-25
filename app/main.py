@@ -2,17 +2,21 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from starlette.concurrency import run_in_threadpool
 
 from app.api.v1.router import api_router
 from app.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.db.database import dispose_engines
+from app.services.storage_service import get_storage_service
 
 settings = get_settings()
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # Ensure both material and certificate buckets exist before accepting uploads.
+    await run_in_threadpool(get_storage_service().ensure_buckets)
     yield
     await dispose_engines()
 
