@@ -16,7 +16,7 @@ from datasketch import MinHash, MinHashLSH
 from sqlalchemy import select
 
 from app.config import get_settings
-from app.models.models import MaterialHash, MaterialTextContent
+from app.models.models import Material, MaterialHash, MaterialTextContent
 
 logger = logging.getLogger(__name__)
 
@@ -237,9 +237,21 @@ def find_similar_materials(
         elif existing is not None:
             existing["check_method"] = "hybrid"
 
+    # Do not emit stale Elasticsearch documents: similarity_checks has a FK
+    # to materials, so every candidate must still exist in PostgreSQL.
+    candidate_ids = [UUID(key) for key in candidates]
+    existing_ids = (
+        set(session.scalars(select(Material.id).where(Material.id.in_(candidate_ids))).all())
+        if candidate_ids else set()
+    )
+
     # Keep only actual textual overlap; LSH's threshold is a candidate filter.
     return sorted(
-        (item for item in candidates.values() if item["similarity_percentage"] > 0),
+        (
+            item for item in candidates.values()
+            if item["similarity_percentage"] > 0
+            and UUID(item["matched_material_id"]) in existing_ids
+        ),
         key=lambda item: item["similarity_percentage"],
         reverse=True,
     )
