@@ -158,7 +158,16 @@ async def register_material(
     # 2. Валидации
     validate_upload(size_bytes=hash_res.size_bytes, content_type=content_type, settings=s)
 
-    # 3. Точный дубликат? -> HTTP 409, ничего не сохраняем (правила №1, №2)
+    # 3. Serialize concurrent registrations of the same content on PostgreSQL.
+    # The transaction-scoped advisory lock is held until the caller commits.
+    dialect_name = session.bind.dialect.name if session.bind is not None else "postgresql"
+    if dialect_name == "postgresql":
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:sha256))"),
+            {"sha256": hash_res.sha256},
+        )
+
+    # Точный дубликат? -> HTTP 409, ничего не сохраняем.
     duplicate = await find_duplicate_by_sha256(session, hash_res.sha256)
     if duplicate is not None:
         raise DuplicateMaterialError(
@@ -211,25 +220,35 @@ async def register_material(
         )
         """
     )
-    await session.execute(
-        insert_stmt,
-        {
-            "id": str(material_id),
-            "registration_number": registration_number,
-            "author_id": str(author_id),
-            "title": title[:255],
-            "description": description,
-            "category": category[:100],
-            "tags": tags_param,
-            "sha256_hash": hash_res.sha256,
-            "file_s3_path": f"s3://{storage.bucket_files}/{object_key}",
-            "file_type": content_type,
-            "file_size_bytes": hash_res.size_bytes,
-        },
-    )
-    # Явный flush: вызывающий код (API-слой) публикует Celery-задачу только
-    # после того, как строка гарантированно будет видна воркеру.
-    await session.flush()
+    try:
+        await session.execute(
+            insert_stmt,
+            {
+                "id": str(material_id),
+                "registration_number": registration_number,
+                "author_id": str(author_id),
+                "title": title[:255],
+                "description": description,
+                "category": category[:100],
+                "tags": tags_param,
+                "sha256_hash": hash_res.sha256,
+                "file_s3_path": f"s3://{storage.bucket_files}/{object_key}",
+                "file_type": content_type,
+                "file_size_bytes": hash_res.size_bytes,
+            },
+        )
+        # Ensure the INSERT reached the database before returning.
+        await session.flush()
+    except Exception:
+        # The object was uploaded before the DB insert; avoid orphaned files.
+        try:
+            storage.delete_object(key=object_key, bucket=storage.bucket_files)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "Failed to clean up uploaded object after DB error: %s", object_key
+            )
+        raise
 
     return RegistrationResult(
         material_id=str(material_id),
