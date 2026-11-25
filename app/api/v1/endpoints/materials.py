@@ -8,6 +8,9 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppError, DuplicateMaterialError
+from app.api.dependencies import get_current_user
+from app.models.enums import UserRole
+from app.models.models import User
 from app.db.database import get_db
 from app.models.models import Material
 from app.schemas.materials import (
@@ -38,7 +41,7 @@ router = APIRouter(prefix="/materials", tags=["Materials"])
 )
 async def create_material(
     file: UploadFile = File(..., description="Файл материала"),
-    author_id: UUID = Form(..., description="UUID автора"),
+    current_user: User = Depends(get_current_user),
     title: str = Form(..., min_length=1, max_length=255),
     category: str = Form(..., min_length=1, max_length=100),
     description: str | None = Form(None, max_length=10000),
@@ -63,7 +66,7 @@ async def create_material(
             session=session,
             storage=storage,
             upload=file,
-            author_id=author_id,
+            author_id=current_user.id,
             title=title.strip(),
             category=category.strip(),
             description=description,
@@ -101,8 +104,7 @@ async def create_material(
         material_id=result.material_id,
         registration_number=result.registration_number,
         sha256_hash=result.sha256_hash,
-        file_s3_path=result.file_s3_path,
-        file_type=result.file_type,
+            file_type=result.file_type,
         file_size_bytes=result.file_size_bytes,
         title=result.title,
         status=result.status,
@@ -120,11 +122,11 @@ async def create_material(
 async def get_material(
     material_id: UUID,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> MaterialDetailResponse:
     material = await session.get(Material, material_id)
     if material is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Материал не найден",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Материал не найден")
+    if material.author_id != current_user.id and current_user.role != UserRole.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав")
     return MaterialDetailResponse.model_validate(material)
