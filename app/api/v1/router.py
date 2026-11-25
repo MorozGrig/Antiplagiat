@@ -5,12 +5,14 @@ from app.api.v1.endpoints.materials import router as materials_router
 from app.api.v1.endpoints.public_verification import router as public_verification_router
 from app.api.v1.endpoints.disputes import router as disputes_router
 from app.api.v1.endpoints.admin import router as admin_router
+from app.api.v1.endpoints.auth import router as auth_router
 
 api_router = APIRouter()
 api_router.include_router(materials_router)
 api_router.include_router(public_verification_router)
 api_router.include_router(disputes_router)
 api_router.include_router(admin_router)
+api_router.include_router(auth_router)
 
 # Alias retained for applications that conventionally import 'router'.
 router = api_router
