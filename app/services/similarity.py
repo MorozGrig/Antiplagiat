@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
-from collections import Counter
 from typing import Any
 from uuid import UUID
 
@@ -17,7 +16,7 @@ from datasketch import MinHash, MinHashLSH
 from sqlalchemy import select
 
 from app.config import get_settings
-from app.models.models import Material, MaterialHash, MaterialTextContent
+from app.models.models import MaterialHash, MaterialTextContent
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +36,7 @@ def _tokens(text: str) -> set[str]:
 
 
 def _minhash_from_text(text: str) -> MinHash:
-    settings = get_settings()
-    num_perm = int(getattr(settings, "minhash_num_perm", MINHASH_NUM_PERM) or MINHASH_NUM_PERM)
-    # Schema and requirements specify exactly 128 permutations.
-    num_perm = MINHASH_NUM_PERM
-    signature = MinHash(num_perm=num_perm, hashfunc=_postgres_safe_hash)
+    signature = MinHash(num_perm=MINHASH_NUM_PERM, hashfunc=_postgres_safe_hash)
     for token in _tokens(text):
         signature.update(token.encode("utf-8"))
     return signature
@@ -51,7 +46,7 @@ def build_minhash_signature(normalized_text: str) -> list[int]:
     """Build a 128-value MinHash signature as a PostgreSQL-safe integer list."""
     if not normalized_text or not normalized_text.strip():
         return []
-    return [int(value) for value in _minhash_from_text(normalized_text).hashvalues]
+    # PostgreSQL INTEGER is signed 32-bit while datasketch uses uint32 values.\n    # Store the same 32 bits as signed integers and reverse the mapping on load.\n    return [\n        value if value < (1 << 31) else value - (1 << 32)\n        for value in (int(item) for item in _minhash_from_text(normalized_text).hashvalues)\n    ]
 
 
 def _minhash_from_signature(values: list[int] | tuple[int, ...]) -> MinHash:
@@ -61,7 +56,7 @@ def _minhash_from_signature(values: list[int] | tuple[int, ...]) -> MinHash:
             f"получено {len(values)}"
         )
     result = MinHash(num_perm=MINHASH_NUM_PERM, hashfunc=_postgres_safe_hash)
-    result.hashvalues = values
+    result.hashvalues = [int(value) & 0xFFFFFFFF for value in values]
     return result
 
 
