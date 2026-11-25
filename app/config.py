@@ -112,7 +112,7 @@ class Settings(BaseSettings):
         description="Порог схожести, ниже которого совпадения не считаются значимыми.",
     )
     minhash_num_perm: int = 128
-    minhash_threshold: float = 0.5
+    minhash_threshold: float = 0.3
 
     # ------------------------------------------------------------------ #
     # JWT (python-jose)
