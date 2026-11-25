@@ -7,12 +7,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AppError, DuplicateMaterialError
 from app.api.dependencies import get_current_user
-from app.models.enums import UserRole
-from app.models.models import User
+from app.core.exceptions import AppError, DuplicateMaterialError
 from app.db.database import get_db
-from app.models.models import Material
+from app.models.enums import UserRole
+from app.models.models import Material, User
 from app.schemas.materials import (
     DuplicateMaterialResponse,
     MaterialDetailResponse,
@@ -104,7 +103,7 @@ async def create_material(
         material_id=result.material_id,
         registration_number=result.registration_number,
         sha256_hash=result.sha256_hash,
-            file_type=result.file_type,
+        file_type=result.file_type,
         file_size_bytes=result.file_size_bytes,
         title=result.title,
         status=result.status,
