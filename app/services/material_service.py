@@ -244,7 +244,9 @@ async def register_material(
     except Exception:
         # The object was uploaded before the DB insert; avoid orphaned files.
         try:
-            await run_in_threadpool(\n                storage.delete_object, key=object_key, bucket=storage.bucket_files\n            )
+            await run_in_threadpool(
+                storage.delete_object, key=object_key, bucket=storage.bucket_files
+            )
         except Exception:
             import logging
             logging.getLogger(__name__).exception(
