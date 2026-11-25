@@ -149,6 +149,54 @@ def _elasticsearch_candidates(
                 logger.debug("Could not close Elasticsearch client", exc_info=True)
 
 
+def index_material_text(
+    *,
+    material_id: UUID | str,
+    normalized_text: str,
+) -> bool:
+    """Upsert or remove one material in Elasticsearch for more_like_this.
+
+    Elasticsearch is an auxiliary candidate source. A temporary ES outage must
+    not prevent the authoritative PostgreSQL/LSH pipeline from completing.
+    """
+    settings = get_settings()
+    client = None
+    try:
+        from elasticsearch import Elasticsearch, NotFoundError
+        client = Elasticsearch(
+            settings.elasticsearch_url,
+            request_timeout=settings.elasticsearch_request_timeout,
+            verify_certs=settings.elasticsearch_verify_certs,
+        )
+        index_name = settings.elasticsearch_index_materials
+        document_id = str(UUID(str(material_id)))
+        if normalized_text and normalized_text.strip():
+            client.index(
+                index=index_name,
+                id=document_id,
+                document={
+                    "material_id": document_id,
+                    "normalized_text": normalized_text[:1_000_000],
+                },
+                refresh="wait_for",
+            )
+        else:
+            try:
+                client.delete(index=index_name, id=document_id, refresh="wait_for")
+            except NotFoundError:
+                pass
+        return True
+    except Exception:
+        logger.exception("Could not synchronize material %s to Elasticsearch", material_id)
+        return False
+    finally:
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                logger.debug("Could not close Elasticsearch client", exc_info=True)
+
+
 def find_similar_materials(
     *,
     session,
