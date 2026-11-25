@@ -84,7 +84,6 @@ class DuplicateMaterialError(AppError):
                     "id": existing_material_id,
                     "registration_number": existing_registration_number,
                     "title": existing_title,
-                    "author_id": author_id,
                     "created_at": created_at,
                 },
             },
