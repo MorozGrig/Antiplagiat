@@ -46,8 +46,12 @@ def _stopwords() -> dict[str, frozenset[str]]:
 @lru_cache(maxsize=1)
 def _russian_morph():
     try:
-        import pymorphy2
-        return pymorphy2.MorphAnalyzer()
+        try:
+            import pymorphy3
+            return pymorphy3.MorphAnalyzer()
+        except ImportError:
+            import pymorphy2
+            return pymorphy2.MorphAnalyzer()
     except (ImportError, Exception):
         # Morphology is an enhancement, not a reason to make all ingestion fail.
         return None
