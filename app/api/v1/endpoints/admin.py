@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import require_admin
 from app.db.database import get_db
-from app.models.enums import MaterialStatus
+from app.models.enums import DisputeStatus, MaterialStatus
 from app.models.models import CopyrightDispute, Material, ProcessingLog, User
 from app.schemas.admin import (
     AdminMaterialResponse,
@@ -128,7 +128,7 @@ async def registry_stats(
     pending_disputes = await session.scalar(
         select(func.count())
         .select_from(CopyrightDispute)
-        .where(CopyrightDispute.status == "pending")
+        .where(CopyrightDispute.status == DisputeStatus.pending)
     )
     return {
         "users_total": int(users_count or 0),
