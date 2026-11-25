@@ -9,7 +9,6 @@ class MaterialRegistrationResponse(BaseModel):
     material_id: UUID
     registration_number: str
     sha256_hash: str
-    file_s3_path: str
     file_type: str
     file_size_bytes: int
     title: str
