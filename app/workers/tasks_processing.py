@@ -80,7 +80,7 @@ def _write_log(
             status=status,
             details=details,
             error_message=error_message,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=(None if status == "started" else datetime.now(timezone.utc)),
         )
     )
     session.flush()
