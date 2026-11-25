@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 from celery import shared_task
-from sqlalchemy import delete, select
+from sqlalchemy import delete
 
 from app.db.database import get_sync_session
 from app.models.enums import ProcessingStatus
@@ -163,6 +163,7 @@ def process_material(self, material_id: str) -> dict[str, Any]:
         session.flush()
         _write_log(session, material_uuid, "pipeline", "started")
 
+        current_step = "extraction"
         try:
             # Step 1: fetch source object and extract text.
             bucket, object_key = _parse_s3_path(material.file_s3_path)
@@ -190,6 +191,7 @@ def process_material(self, material_id: str) -> dict[str, Any]:
                 },
             )
 
+            current_step = "normalization"
             # Step 2: normalize text. Media without extractable text remain
             # hash-only and are assigned 100% uniqueness (unless exact dupes
             # were rejected at registration time).
@@ -216,6 +218,7 @@ def process_material(self, material_id: str) -> dict[str, Any]:
                 details={"word_count": word_count},
             )
 
+            current_step = "minhash"
             # Step 3: MinHash signature (empty for image/video or empty text).
             if normalized_text.strip():
                 from app.services.similarity import build_minhash_signature
@@ -232,6 +235,7 @@ def process_material(self, material_id: str) -> dict[str, Any]:
                 details={"signature_length": len(signature)},
             )
 
+            current_step = "similarity"
             # Step 4: similarity lookup. No text means no text-based matching.
             matches: list[dict[str, Any]] = []
             if normalized_text.strip():
@@ -269,6 +273,7 @@ def process_material(self, material_id: str) -> dict[str, Any]:
                 details={"matches_found": len(matches)},
             )
 
+            current_step = "uniqueness_score"
             # Step 5: score is based on the maximum found similarity.
             max_similarity = max(
                 (float(match["similarity_percentage"]) for match in matches),
@@ -307,7 +312,7 @@ def process_material(self, material_id: str) -> dict[str, Any]:
             _write_log(
                 session,
                 material_uuid,
-                "pipeline",
+                current_step,
                 "failed",
                 error_message=f"{type(exc).__name__}: {exc}"[:4000],
             )
