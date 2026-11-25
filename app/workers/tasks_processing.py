@@ -155,7 +155,9 @@ def process_material(self, material_id: str) -> dict[str, Any]:
         raise ValueError(f"Некорректный material_id: {material_id!r}") from exc
 
     with get_sync_session() as session:
-        material = session.scalar(\n            select(Material).where(Material.id == material_uuid).with_for_update()\n        )
+        material = session.scalar(
+            select(Material).where(Material.id == material_uuid).with_for_update()
+        )
         if material is None:
             raise ValueError(f"Материал {material_id} не найден")
 
