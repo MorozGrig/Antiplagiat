@@ -307,17 +307,29 @@ def process_material(self, material_id: str) -> dict[str, Any]:
 
         except Exception as exc:
             logger.exception("Material %s processing failed", material_id)
-            # Persist failure state and the error record in the same transaction.
-            material.processing_status = ProcessingStatus.failed
-            _write_log(
-                session,
-                material_uuid,
-                current_step,
-                "failed",
-                error_message=f"{type(exc).__name__}: {exc}"[:4000],
-            )
+            # A failed SQL statement leaves the current transaction unusable.
+            # Roll it back first, then persist the failure in a fresh transaction
+            # so the status/log are not lost together with the failed pipeline.
+            error_text = f"{type(exc).__name__}: {exc}"[:4000]
+            session.rollback()
+            try:
+                with get_sync_session() as failure_session:
+                    failed_material = failure_session.get(Material, material_uuid)
+                    if failed_material is not None:
+                        failed_material.processing_status = ProcessingStatus.failed
+                        _write_log(
+                            failure_session,
+                            material_uuid,
+                            current_step,
+                            "failed",
+                            error_message=error_text,
+                        )
+            except Exception:
+                logger.exception(
+                    "Could not persist failed status for material %s", material_id
+                )
             return {
                 "material_id": str(material_uuid),
                 "processing_status": ProcessingStatus.failed.value,
-                "error": f"{type(exc).__name__}: {exc}",
+                "error": error_text,
             }
