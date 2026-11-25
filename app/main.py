@@ -1,0 +1,32 @@
+"""FastAPI application entry point."""
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from app.api.v1.router import api_router
+from app.config import get_settings
+from app.core.exceptions import register_exception_handlers
+from app.db.database import dispose_engines
+
+settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    yield
+    await dispose_engines()
+
+
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    debug=settings.debug,
+    lifespan=lifespan,
+)
+register_exception_handlers(app)
+app.include_router(api_router, prefix=settings.api_v1_prefix)
+
+
+@app.get("/health", tags=["Health"])
+async def health_check() -> dict[str, str]:
+    return {"status": "ok"}
