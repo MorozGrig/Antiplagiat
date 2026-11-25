@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import require_admin
 from app.db.database import get_db
 from app.models.enums import MaterialStatus
-from app.models.models import Material, ProcessingLog, User
+from app.models.models import CopyrightDispute, Material, ProcessingLog, User
 from app.schemas.admin import (
     AdminMaterialResponse,
     AdminMaterialUpdate,
@@ -122,16 +122,13 @@ async def registry_stats(
 ) -> dict:
     users_count = await session.scalar(select(func.count()).select_from(User))
     materials_count = await session.scalar(select(func.count()).select_from(Material))
-    disputes_count = await session.scalar(select(func.count()).select_from(__import__(
-        "app.models.models", fromlist=["CopyrightDispute"]
-    ).CopyrightDispute))
+    disputes_count = await session.scalar(
+        select(func.count()).select_from(CopyrightDispute)
+    )
     pending_disputes = await session.scalar(
-        select(func.count()).select_from(
-            __import__("app.models.models", fromlist=["CopyrightDispute"]).CopyrightDispute
-        ).where(
-            __import__("app.models.models", fromlist=["CopyrightDispute"]).CopyrightDispute.status
-            == "pending"
-        )
+        select(func.count())
+        .select_from(CopyrightDispute)
+        .where(CopyrightDispute.status == "pending")
     )
     return {
         "users_total": int(users_count or 0),
