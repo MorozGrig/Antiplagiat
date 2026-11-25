@@ -12,7 +12,7 @@ from sqlalchemy.orm import joinedload
 
 from app.db.database import get_db
 from app.models.enums import CertificateStatus, MaterialStatus, ProcessingStatus
-from app.models.models import Certificate
+from app.models.models import Certificate, Material
 
 router = APIRouter(prefix="/public/verification", tags=["Public verification"])
 
@@ -55,7 +55,7 @@ async def verify_certificate(
     """
     certificate = await session.scalar(
         select(Certificate)
-        .options(joinedload(Certificate.material).joinedload("author"))
+        .options(joinedload(Certificate.material).joinedload(Material.author))
         .where(Certificate.certificate_number == certificate_number)
     )
     if certificate is None:
@@ -115,8 +115,6 @@ async def verify_by_registration_number(
     session: AsyncSession = Depends(get_db),
 ) -> PublicVerificationResponse:
     """Resolve the certificate number from a public material registration ID."""
-    from app.models.models import Material
-
     certificate = await session.scalar(
         select(Certificate)
         .join(Material, Certificate.material_id == Material.id)
