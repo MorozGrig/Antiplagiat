@@ -94,7 +94,6 @@ class Settings(BaseSettings):
     allowed_mime_types: List[str] = Field(
         default_factory=lambda: [
             "application/pdf",
-            "application/msword",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "text/plain",
             "image/jpeg",
