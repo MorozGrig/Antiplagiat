@@ -22,6 +22,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     ForeignKey,
+Index,
     Integer,
     Numeric,
     Sequence,
@@ -49,16 +50,12 @@ from app.models.enums import (
 
 
 def _pg_enum(python_enum: type, type_name: str) -> PgENUM:
-    """Построить postgresql.ENUM по python-enum с фиксированным именем типа.
-
-    `create_type=False` — типы уже созданы DDL/миграцией и пересоздаваться
-    SQLAlchemy не должны.
-    """
     return PgENUM(
-        *[e.value for e in python_enum],
+        python_enum,
         name=type_name,
         native_enum=True,
         create_type=False,
+        values_callable=lambda enum_cls: [member.value for member in enum_cls],
     )
 
 
@@ -84,7 +81,6 @@ registration_number_seq.metadata = Base.metadata
 # --------------------------------------------------------------------------- #
 class User(Base):
     __tablename__ = "users"
-    __table_args__ = {"schema": "public"}
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
@@ -125,7 +121,6 @@ class User(Base):
 # --------------------------------------------------------------------------- #
 class Material(Base):
     __tablename__ = "materials"
-    __table_args__ = {"schema": "public"}
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
@@ -136,7 +131,7 @@ class Material(Base):
     registration_number: Mapped[str] = mapped_column(String(30), nullable=False, unique=True)
     author_id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("public.users.id", ondelete="RESTRICT"),
+        ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -168,7 +163,7 @@ class Material(Base):
     is_duplicate: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     duplicate_of: Mapped[Optional[str]] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("public.materials.id", ondelete="SET NULL"),
+        ForeignKey("materials.id", ondelete="SET NULL"),
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -209,11 +204,10 @@ class Material(Base):
 # --------------------------------------------------------------------------- #
 class MaterialTextContent(Base):
     __tablename__ = "material_text_content"
-    __table_args__ = {"schema": "public"}
 
     material_id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("public.materials.id", ondelete="CASCADE"),
+        ForeignKey("materials.id", ondelete="CASCADE"),
         primary_key=True,
     )
     raw_text: Mapped[str] = mapped_column(Text, nullable=False)
@@ -234,11 +228,10 @@ class MaterialTextContent(Base):
 # --------------------------------------------------------------------------- #
 class MaterialHash(Base):
     __tablename__ = "material_hashes"
-    __table_args__ = {"schema": "public"}
 
     material_id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("public.materials.id", ondelete="CASCADE"),
+        ForeignKey("materials.id", ondelete="CASCADE"),
         primary_key=True,
     )
     simhash_value: Mapped[Optional[int]] = mapped_column(BIGINT, nullable=True)
@@ -260,11 +253,10 @@ class MaterialHash(Base):
 class SimilarityCheck(Base):
     __tablename__ = "similarity_checks"
     __table_args__ = (
-        UniqueConstraint(
-            "target_material_id", "matched_material_id", name="unique_material_pair"
-        ),
-        {"schema": "public"},
-    )
+    UniqueConstraint(
+        "target_material_id", "matched_material_id", name="unique_material_pair"
+    ),
+)
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
@@ -273,12 +265,12 @@ class SimilarityCheck(Base):
     )
     target_material_id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("public.materials.id", ondelete="CASCADE"),
+        ForeignKey("materials.id", ondelete="CASCADE"),
         nullable=False,
     )
     matched_material_id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("public.materials.id", ondelete="CASCADE"),
+        ForeignKey("materials.id", ondelete="CASCADE"),
         nullable=False,
     )
     similarity_percentage: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False)
@@ -303,7 +295,6 @@ class SimilarityCheck(Base):
 # --------------------------------------------------------------------------- #
 class Certificate(Base):
     __tablename__ = "certificates"
-    __table_args__ = {"schema": "public"}
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
@@ -312,7 +303,7 @@ class Certificate(Base):
     )
     material_id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("public.materials.id", ondelete="RESTRICT"),
+        ForeignKey("materials.id", ondelete="RESTRICT"),
         nullable=False,
         unique=True,
     )
@@ -341,7 +332,6 @@ class Certificate(Base):
 # --------------------------------------------------------------------------- #
 class CopyrightDispute(Base):
     __tablename__ = "copyright_disputes"
-    __table_args__ = {"schema": "public"}
 
     id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
@@ -350,17 +340,17 @@ class CopyrightDispute(Base):
     )
     material_id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("public.materials.id", ondelete="RESTRICT"),
+        ForeignKey("materials.id", ondelete="RESTRICT"),
         nullable=False,
     )
     original_material_id: Mapped[Optional[str]] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("public.materials.id", ondelete="RESTRICT"),
+        ForeignKey("materials.id", ondelete="RESTRICT"),
         nullable=True,
     )
     complainant_id: Mapped[str] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("public.users.id", ondelete="RESTRICT"),
+        ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
     )
     reason: Mapped[str] = mapped_column(Text, nullable=False)
@@ -373,7 +363,7 @@ class CopyrightDispute(Base):
     resolution: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     resolved_by: Mapped[Optional[str]] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("public.users.id", ondelete="SET NULL"),
+        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
     moderator_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -399,12 +389,11 @@ class CopyrightDispute(Base):
 # --------------------------------------------------------------------------- #
 class ProcessingLog(Base):
     __tablename__ = "processing_log"
-    __table_args__ = {"schema": "public"}
 
     id: Mapped[int] = mapped_column(BIGINT, primary_key=True, autoincrement=True)
     material_id: Mapped[Optional[str]] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("public.materials.id", ondelete="CASCADE"),
+        ForeignKey("materials.id", ondelete="CASCADE"),
         nullable=True,
     )
     step: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -433,3 +422,29 @@ ALL_MODELS = [
     CopyrightDispute,
     ProcessingLog,
 ]
+# --------------------------------------------------------------------------- #
+# Performance indexes
+# --------------------------------------------------------------------------- #
+
+Index(
+    "ix_materials_sha256_hash",
+    Material.sha256_hash,
+)
+
+Index(
+    "ix_processing_log_material_started_at",
+    ProcessingLog.material_id,
+    ProcessingLog.started_at.desc(),
+)
+
+Index(
+    "ix_copyright_disputes_complainant_created_at",
+    CopyrightDispute.complainant_id,
+    CopyrightDispute.created_at.desc(),
+)
+
+Index(
+    "ix_copyright_disputes_status_created_at",
+    CopyrightDispute.status,
+    CopyrightDispute.created_at,
+)

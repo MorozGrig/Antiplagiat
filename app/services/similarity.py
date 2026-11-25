@@ -13,6 +13,7 @@ from typing import Any
 from uuid import UUID
 
 from datasketch import MinHash, MinHashLSH
+import numpy as np
 from sqlalchemy import select
 
 from app.config import get_settings
@@ -60,8 +61,12 @@ def _minhash_from_signature(values: list[int] | tuple[int, ...]) -> MinHash:
             f"Ожидалась MinHash-сигнатура из {MINHASH_NUM_PERM} значений, "
             f"получено {len(values)}"
         )
+
     result = MinHash(num_perm=MINHASH_NUM_PERM, hashfunc=_postgres_safe_hash)
-    result.hashvalues = [int(value) & 0xFFFFFFFF for value in values]
+    result.hashvalues = np.array(
+        [int(value) & 0xFFFFFFFF for value in values],
+        dtype=np.uint64,
+    )
     return result
 
 

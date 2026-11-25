@@ -41,3 +41,24 @@ class DuplicateMaterialResponse(BaseModel):
     error: str = "duplicate_material"
     message: str
     details: dict = Field(default_factory=dict)
+
+
+class MaterialListResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    registration_number: str
+    title: str
+    category: str
+    status: str
+    processing_status: str
+    uniqueness_score: float | None = None
+    created_at: datetime
+
+
+class MaterialListPageResponse(BaseModel):
+    items: list[MaterialListResponse]
+    total: int
+    limit: int
+    offset: int
+

@@ -1,5 +1,6 @@
 """Material registration and lookup API routes."""
 from __future__ import annotations
+from sqlalchemy import func, select
 
 import logging
 from uuid import UUID
@@ -15,6 +16,7 @@ from app.models.models import Material, User
 from app.schemas.materials import (
     DuplicateMaterialResponse,
     MaterialDetailResponse,
+    MaterialListPageResponse,
     MaterialRegistrationResponse,
 )
 from app.services.material_service import register_material
@@ -110,6 +112,42 @@ async def create_material(
         task_id=task_id,
     )
 
+
+@router.get(
+    "",
+    response_model=MaterialListPageResponse,
+    summary="Получить список авторских материалов",
+)
+async def list_materials(
+    limit: int = 20,
+    offset: int = 0,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MaterialListPageResponse:
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
+
+    query = select(Material)
+    count_query = select(func.count(Material.id))
+
+    if current_user.role != UserRole.admin:
+        query = query.where(Material.author_id == current_user.id)
+        count_query = count_query.where(Material.author_id == current_user.id)
+
+    total = await session.scalar(count_query)
+
+    result = await session.scalars(
+        query.order_by(Material.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+
+    return MaterialListPageResponse(
+        items=list(result.all()),
+        total=total or 0,
+        limit=limit,
+        offset=offset,
+    )
 
 @router.get(
     "/{material_id}",

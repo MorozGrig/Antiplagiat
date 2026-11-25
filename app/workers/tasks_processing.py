@@ -173,11 +173,12 @@ def process_material(self, material_id: str) -> dict[str, Any]:
             file_bytes = storage.download_bytes(key=object_key, bucket=bucket)
             suffix = _extension_for_file_type(material.file_type)
 
-            with tempfile.NamedTemporaryFile(suffix=suffix) as temp_file:
-                temp_file.write(file_bytes)
-                temp_file.flush()
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir) / f"material{suffix}"
+                temp_path.write_bytes(file_bytes)
+
                 raw_text, language_code = extract_text(
-                    temp_file.name, material.file_type
+                    temp_path, material.file_type
                 )
 
             is_media_only = not raw_text.strip()
