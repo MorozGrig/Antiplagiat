@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 from celery import shared_task
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from app.db.database import get_sync_session
 from app.models.enums import ProcessingStatus
@@ -155,7 +155,7 @@ def process_material(self, material_id: str) -> dict[str, Any]:
         raise ValueError(f"Некорректный material_id: {material_id!r}") from exc
 
     with get_sync_session() as session:
-        material = session.get(Material, material_uuid)
+        material = session.scalar(\n            select(Material).where(Material.id == material_uuid).with_for_update()\n        )
         if material is None:
             raise ValueError(f"Материал {material_id} не найден")
 
@@ -216,6 +216,14 @@ def process_material(self, material_id: str) -> dict[str, Any]:
                 "normalization",
                 "completed",
                 details={"word_count": word_count},
+            )
+
+            # Keep the MLT index synchronized. Elasticsearch is optional and
+            # its helper deliberately degrades to False on service outages.
+            from app.services.similarity import index_material_text
+            index_material_text(
+                material_id=material_uuid,
+                normalized_text=normalized_text,
             )
 
             current_step = "minhash"
