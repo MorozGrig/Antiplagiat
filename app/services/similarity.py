@@ -46,7 +46,12 @@ def build_minhash_signature(normalized_text: str) -> list[int]:
     """Build a 128-value MinHash signature as a PostgreSQL-safe integer list."""
     if not normalized_text or not normalized_text.strip():
         return []
-    # PostgreSQL INTEGER is signed 32-bit while datasketch uses uint32 values.\n    # Store the same 32 bits as signed integers and reverse the mapping on load.\n    return [\n        value if value < (1 << 31) else value - (1 << 32)\n        for value in (int(item) for item in _minhash_from_text(normalized_text).hashvalues)\n    ]
+    # PostgreSQL INTEGER is signed 32-bit while datasketch uses uint32 values.
+    # Store the same 32 bits as signed integers and reverse the mapping on load.
+    return [
+        value if value < (1 << 31) else value - (1 << 32)
+        for value in (int(item) for item in _minhash_from_text(normalized_text).hashvalues)
+    ]
 
 
 def _minhash_from_signature(values: list[int] | tuple[int, ...]) -> MinHash:
