@@ -17,7 +17,7 @@ from app.models.enums import UserRole, UserStatus
 from app.models.models import User
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
-_passwords = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_passwords = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
 class RegisterRequest(BaseModel):
