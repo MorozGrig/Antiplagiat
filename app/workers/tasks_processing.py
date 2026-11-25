@@ -322,6 +322,12 @@ def process_material(self, material_id: str) -> dict[str, Any]:
             # so the status/log are not lost together with the failed pipeline.
             error_text = f"{type(exc).__name__}: {exc}"[:4000]
             session.rollback()
+            # Remove a possibly indexed document if a later pipeline step failed.
+            try:
+                from app.services.similarity import index_material_text
+                index_material_text(material_id=material_uuid, normalized_text="")
+            except Exception:
+                logger.exception("Could not remove failed material from Elasticsearch")
             try:
                 with get_sync_session() as failure_session:
                     failed_material = failure_session.get(Material, material_uuid)
