@@ -17,6 +17,8 @@ from app.schemas.materials import (
 )
 from app.services.material_service import register_material
 from app.services.storage_service import StorageService, get_storage_service
+# Configure the Redis-backed default Celery app before resolving shared_task.
+from app.workers.celery_app import celery_app  # noqa: F401
 from app.workers.tasks_processing import process_material
 
 logger = logging.getLogger(__name__)
