@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 from celery import shared_task
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from app.db.database import get_sync_session
 from app.models.enums import ProcessingStatus
@@ -80,7 +80,7 @@ def _write_log(
             status=status,
             details=details,
             error_message=error_message,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=(None if status == "started" else datetime.now(timezone.utc)),
         )
     )
     session.flush()
@@ -155,7 +155,9 @@ def process_material(self, material_id: str) -> dict[str, Any]:
         raise ValueError(f"Некорректный material_id: {material_id!r}") from exc
 
     with get_sync_session() as session:
-        material = session.get(Material, material_uuid)
+        material = session.scalar(
+            select(Material).where(Material.id == material_uuid).with_for_update()
+        )
         if material is None:
             raise ValueError(f"Материал {material_id} не найден")
 
@@ -171,11 +173,12 @@ def process_material(self, material_id: str) -> dict[str, Any]:
             file_bytes = storage.download_bytes(key=object_key, bucket=bucket)
             suffix = _extension_for_file_type(material.file_type)
 
-            with tempfile.NamedTemporaryFile(suffix=suffix) as temp_file:
-                temp_file.write(file_bytes)
-                temp_file.flush()
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir) / f"material{suffix}"
+                temp_path.write_bytes(file_bytes)
+
                 raw_text, language_code = extract_text(
-                    temp_file.name, material.file_type
+                    temp_path, material.file_type
                 )
 
             is_media_only = not raw_text.strip()
@@ -216,6 +219,14 @@ def process_material(self, material_id: str) -> dict[str, Any]:
                 "normalization",
                 "completed",
                 details={"word_count": word_count},
+            )
+
+            # Keep the MLT index synchronized. Elasticsearch is optional and
+            # its helper deliberately degrades to False on service outages.
+            from app.services.similarity import index_material_text
+            index_material_text(
+                material_id=material_uuid,
+                normalized_text=normalized_text,
             )
 
             current_step = "minhash"
@@ -307,17 +318,35 @@ def process_material(self, material_id: str) -> dict[str, Any]:
 
         except Exception as exc:
             logger.exception("Material %s processing failed", material_id)
-            # Persist failure state and the error record in the same transaction.
-            material.processing_status = ProcessingStatus.failed
-            _write_log(
-                session,
-                material_uuid,
-                current_step,
-                "failed",
-                error_message=f"{type(exc).__name__}: {exc}"[:4000],
-            )
+            # A failed SQL statement leaves the current transaction unusable.
+            # Roll it back first, then persist the failure in a fresh transaction
+            # so the status/log are not lost together with the failed pipeline.
+            error_text = f"{type(exc).__name__}: {exc}"[:4000]
+            session.rollback()
+            # Remove a possibly indexed document if a later pipeline step failed.
+            try:
+                from app.services.similarity import index_material_text
+                index_material_text(material_id=material_uuid, normalized_text="")
+            except Exception:
+                logger.exception("Could not remove failed material from Elasticsearch")
+            try:
+                with get_sync_session() as failure_session:
+                    failed_material = failure_session.get(Material, material_uuid)
+                    if failed_material is not None:
+                        failed_material.processing_status = ProcessingStatus.failed
+                        _write_log(
+                            failure_session,
+                            material_uuid,
+                            current_step,
+                            "failed",
+                            error_message=error_text,
+                        )
+            except Exception:
+                logger.exception(
+                    "Could not persist failed status for material %s", material_id
+                )
             return {
                 "material_id": str(material_uuid),
                 "processing_status": ProcessingStatus.failed.value,
-                "error": f"{type(exc).__name__}: {exc}",
+                "error": error_text,
             }

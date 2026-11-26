@@ -13,6 +13,7 @@ from typing import Any
 from uuid import UUID
 
 from datasketch import MinHash, MinHashLSH
+import numpy as np
 from sqlalchemy import select
 
 from app.config import get_settings
@@ -46,7 +47,12 @@ def build_minhash_signature(normalized_text: str) -> list[int]:
     """Build a 128-value MinHash signature as a PostgreSQL-safe integer list."""
     if not normalized_text or not normalized_text.strip():
         return []
-    # PostgreSQL INTEGER is signed 32-bit while datasketch uses uint32 values.\n    # Store the same 32 bits as signed integers and reverse the mapping on load.\n    return [\n        value if value < (1 << 31) else value - (1 << 32)\n        for value in (int(item) for item in _minhash_from_text(normalized_text).hashvalues)\n    ]
+    # PostgreSQL INTEGER is signed 32-bit while datasketch uses uint32 values.
+    # Store the same 32 bits as signed integers and reverse the mapping on load.
+    return [
+        value if value < (1 << 31) else value - (1 << 32)
+        for value in (int(item) for item in _minhash_from_text(normalized_text).hashvalues)
+    ]
 
 
 def _minhash_from_signature(values: list[int] | tuple[int, ...]) -> MinHash:
@@ -55,8 +61,12 @@ def _minhash_from_signature(values: list[int] | tuple[int, ...]) -> MinHash:
             f"Ожидалась MinHash-сигнатура из {MINHASH_NUM_PERM} значений, "
             f"получено {len(values)}"
         )
+
     result = MinHash(num_perm=MINHASH_NUM_PERM, hashfunc=_postgres_safe_hash)
-    result.hashvalues = [int(value) & 0xFFFFFFFF for value in values]
+    result.hashvalues = np.array(
+        [int(value) & 0xFFFFFFFF for value in values],
+        dtype=np.uint64,
+    )
     return result
 
 
@@ -141,6 +151,54 @@ def _elasticsearch_candidates(
     except Exception:
         logger.exception("Elasticsearch more_like_this request failed")
         return []
+    finally:
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                logger.debug("Could not close Elasticsearch client", exc_info=True)
+
+
+def index_material_text(
+    *,
+    material_id: UUID | str,
+    normalized_text: str,
+) -> bool:
+    """Upsert or remove one material in Elasticsearch for more_like_this.
+
+    Elasticsearch is an auxiliary candidate source. A temporary ES outage must
+    not prevent the authoritative PostgreSQL/LSH pipeline from completing.
+    """
+    settings = get_settings()
+    client = None
+    try:
+        from elasticsearch import Elasticsearch, NotFoundError
+        client = Elasticsearch(
+            settings.elasticsearch_url,
+            request_timeout=settings.elasticsearch_request_timeout,
+            verify_certs=settings.elasticsearch_verify_certs,
+        )
+        index_name = settings.elasticsearch_index_materials
+        document_id = str(UUID(str(material_id)))
+        if normalized_text and normalized_text.strip():
+            client.index(
+                index=index_name,
+                id=document_id,
+                document={
+                    "material_id": document_id,
+                    "normalized_text": normalized_text[:1_000_000],
+                },
+                refresh="wait_for",
+            )
+        else:
+            try:
+                client.delete(index=index_name, id=document_id, refresh="wait_for")
+            except NotFoundError:
+                pass
+        return True
+    except Exception:
+        logger.exception("Could not synchronize material %s to Elasticsearch", material_id)
+        return False
     finally:
         if client is not None:
             try:

@@ -124,27 +124,21 @@ class StorageService:
         - Content-Length берём из фактического остатка потока (seek/tell),
           иначе boto3/s3transfer может недогрузить данные.
         """
+        # upload_fileobj computes the content length from the seekable stream.
+        # ContentLength is NOT a supported upload_fileobj ExtraArgs parameter;
+        # passing it causes s3transfer's ExtraArgs validation to raise ValueError.
+        # Always rewind because hashing/extraction may have consumed the stream.
         try:
             fileobj.seek(0)
-            size = os.fstat(fileobj.fileno()).st_size if False else _remaining_size(fileobj)
-            extra = {"ContentType": content_type}
-            if size is not None:
-                extra["ContentLength"] = size  # разрешён для put_object-вызовов s3transfer
-            self._client.upload_fileobj(
-                Fileobj=fileobj,
-                Bucket=bucket or self.bucket_files,
-                Key=key,
-                ExtraArgs=extra,
-            )
-        except TypeError:
-            # Some s3transfer versions reject ContentLength in multipart path:
-            fileobj.seek(0)
-            self._client.upload_fileobj(
-                Fileobj=fileobj,
-                Bucket=bucket or self.bucket_files,
-                Key=key,
-                ExtraArgs={"ContentType": content_type},
-            )
+        except (AttributeError, OSError, ValueError) as exc:
+            raise ValueError("S3 upload requires a seekable file stream") from exc
+
+        self._client.upload_fileobj(
+            Fileobj=fileobj,
+            Bucket=bucket or self.bucket_files,
+            Key=key,
+            ExtraArgs={"ContentType": content_type},
+        )
         return key
 
     def upload_bytes(

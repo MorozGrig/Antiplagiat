@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: antiplagiat_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: antiplagiat
+      POSTGRES_USER: antiplagiat
+      POSTGRES_PASSWORD: antiplagiat_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U antiplagiat -d antiplagiat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: antiplagiat_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    mem_limit: 256m
+
+  minio:
+    image: pgsty/silo:latest
+    container_name: antiplagiat_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: antiplagiat
+      MINIO_ROOT_PASSWORD: antiplagiat_minio_dev_password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    mem_limit: 512m
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.0
+    container_name: antiplagiat_elasticsearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms1g -Xmx1g"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    mem_limit: 2g
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  elasticsearch_data:

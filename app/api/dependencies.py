@@ -67,12 +67,13 @@ async def require_admin(
     return current_user
 
 
+
 async def require_moderator(
     current_user: User = Depends(get_current_user),
 ) -> User:
-    if current_user.role not in (UserRole.admin, UserRole.expert):
+    if current_user.role != UserRole.admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Требуются права эксперта или администратора",
+            detail="Требуются права администратора",
         )
     return current_user

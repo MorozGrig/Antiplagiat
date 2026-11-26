@@ -116,12 +116,23 @@ async def update_material(
 
 
 @router.get("/stats", summary="Сводная статистика реестра")
+
+@router.get("/stats", summary="Сводная статистика реестра")
 async def registry_stats(
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin),
 ) -> dict:
-    users_count = await session.scalar(select(func.count()).select_from(User))
-    materials_count = await session.scalar(select(func.count()).select_from(Material))
+    users_count = await session.scalar(
+        select(func.count()).select_from(User)
+    )
+    materials_count = await session.scalar(
+        select(func.count()).select_from(Material)
+    )
+    materials_pending = await session.scalar(
+        select(func.count())
+        .select_from(Material)
+        .where(Material.status == MaterialStatus.on_moderation)
+    )
     disputes_count = await session.scalar(
         select(func.count()).select_from(CopyrightDispute)
     )
@@ -130,12 +141,15 @@ async def registry_stats(
         .select_from(CopyrightDispute)
         .where(CopyrightDispute.status == DisputeStatus.pending)
     )
+
     return {
         "users_total": int(users_count or 0),
         "materials_total": int(materials_count or 0),
+        "materials_pending": int(materials_pending or 0),
         "disputes_total": int(disputes_count or 0),
         "disputes_pending": int(pending_disputes or 0),
     }
+
 
 
 @router.get("/processing-log", summary="Журнал обработки материалов")

@@ -1,4 +1,28 @@
+# Python
 __pycache__/
-*.pyc
-.env
+*.py[cod]
+.pytest_cache/
+venv/
 .venv/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Frontend
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Test files
+test_material.txt
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,5 +1,6 @@
 """Material registration and lookup API routes."""
 from __future__ import annotations
+from sqlalchemy import func, select
 
 import logging
 from uuid import UUID
@@ -7,12 +8,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import get_current_user
 from app.core.exceptions import AppError, DuplicateMaterialError
 from app.db.database import get_db
-from app.models.models import Material
+from app.models.enums import UserRole
+from app.models.models import Material, SimilarityCheck, User
 from app.schemas.materials import (
     DuplicateMaterialResponse,
     MaterialDetailResponse,
+    MaterialListPageResponse,
     MaterialRegistrationResponse,
 )
 from app.services.material_service import register_material
@@ -38,7 +42,7 @@ router = APIRouter(prefix="/materials", tags=["Materials"])
 )
 async def create_material(
     file: UploadFile = File(..., description="Файл материала"),
-    author_id: UUID = Form(..., description="UUID автора"),
+    current_user: User = Depends(get_current_user),
     title: str = Form(..., min_length=1, max_length=255),
     category: str = Form(..., min_length=1, max_length=100),
     description: str | None = Form(None, max_length=10000),
@@ -48,9 +52,7 @@ async def create_material(
 ) -> MaterialRegistrationResponse:
     """Register file, reject exact SHA-256 duplicates, then enqueue processing.
 
-    Authentication is not wired in the current project snapshot. Until an
-    auth dependency is implemented, author_id is supplied explicitly as form
-    data; the database FK remains the final check that this user exists.
+    The author is always derived from the authenticated JWT subject.
     """
     if not file.filename:
         raise HTTPException(
@@ -63,7 +65,7 @@ async def create_material(
             session=session,
             storage=storage,
             upload=file,
-            author_id=author_id,
+            author_id=current_user.id,
             title=title.strip(),
             category=category.strip(),
             description=description,
@@ -101,7 +103,6 @@ async def create_material(
         material_id=result.material_id,
         registration_number=result.registration_number,
         sha256_hash=result.sha256_hash,
-        file_s3_path=result.file_s3_path,
         file_type=result.file_type,
         file_size_bytes=result.file_size_bytes,
         title=result.title,
@@ -113,6 +114,42 @@ async def create_material(
 
 
 @router.get(
+    "",
+    response_model=MaterialListPageResponse,
+    summary="Получить список авторских материалов",
+)
+async def list_materials(
+    limit: int = 20,
+    offset: int = 0,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MaterialListPageResponse:
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
+
+    query = select(Material)
+    count_query = select(func.count(Material.id))
+
+    if current_user.role != UserRole.admin:
+        query = query.where(Material.author_id == current_user.id)
+        count_query = count_query.where(Material.author_id == current_user.id)
+
+    total = await session.scalar(count_query)
+
+    result = await session.scalars(
+        query.order_by(Material.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+
+    return MaterialListPageResponse(
+        items=list(result.all()),
+        total=total or 0,
+        limit=limit,
+        offset=offset,
+    )
+
+@router.get(
     "/{material_id}",
     response_model=MaterialDetailResponse,
     summary="Получить сведения о материале",
@@ -120,11 +157,46 @@ async def create_material(
 async def get_material(
     material_id: UUID,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> MaterialDetailResponse:
     material = await session.get(Material, material_id)
+
     if material is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Материал не найден",
         )
-    return MaterialDetailResponse.model_validate(material)
+
+    if material.author_id != current_user.id and current_user.role != UserRole.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Недостаточно прав",
+        )
+
+    query = (
+        select(SimilarityCheck, Material)
+        .join(
+            Material,
+            SimilarityCheck.matched_material_id == Material.id,
+        )
+        .where(SimilarityCheck.target_material_id == material_id)
+        .order_by(SimilarityCheck.similarity_percentage.desc())
+    )
+
+    result = await session.execute(query)
+    matches = result.all()
+
+    response = MaterialDetailResponse.model_validate(material)
+
+    response.similarity_matches = [
+        {
+            "matched_material_id": matched.id,
+            "matched_registration_number": matched.registration_number,
+            "matched_title": matched.title,
+            "similarity_percentage": float(check.similarity_percentage),
+            "check_method": check.check_method.value,
+        }
+        for check, matched in matches
+    ]
+
+    return response
