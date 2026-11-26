@@ -32,11 +32,12 @@ class AppError(Exception):
 class ValidationAppError(AppError):
     """Некорректные входные данные (размер, MIME и т.п.)."""
 
-    status_code = status.HTTP_422_UNPROCESSABLE_ENTITY
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT
     error_code = "validation_error"
 
 
 class FileTooLargeError(ValidationAppError):
+    status_code = status.HTTP_413_CONTENT_TOO_LARGE
     """Файл превышает MAX_FILE_SIZE (настраивается через env)."""
 
     error_code = "file_too_large"

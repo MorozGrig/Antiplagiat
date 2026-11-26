@@ -35,6 +35,10 @@ from app.core.exceptions import (
 )
 from app.services.hashing_service import HashResult, compute_sha256_from_stream
 from app.services.storage_service import StorageService
+from app.services.file_validation_service import (
+    validate_file_content,
+    validate_metadata,
+)
 
 _HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -152,12 +156,45 @@ async def register_material(
     """
     s = settings or get_settings()
 
-    # 1. Хэш + размер (стриминг, без хранения всего файла в памяти)
-    hash_res: HashResult = await run_in_threadpool(compute_sha256_from_stream, upload.file)
+        # 1. SHA-256 и фактический размер файла
+    try:
+        hash_res: HashResult = await run_in_threadpool(
+            compute_sha256_from_stream,
+            upload.file,
+            max_bytes=s.max_file_size,
+        )
+    except ValueError as exc:
+        if "maximum allowed size" in str(exc):
+            raise FileTooLargeError(
+                size_bytes=s.max_file_size + 1,
+                max_bytes=s.max_file_size,
+            ) from exc
+        raise
     content_type = (upload.content_type or "application/octet-stream").split(";")[0].strip()
 
     # 2. Валидации
     validate_upload(size_bytes=hash_res.size_bytes, content_type=content_type, settings=s)
+    # 2.1. Проверка метаданных без молчаливого обрезания значений.
+    validate_metadata(
+        title=title,
+        category=category,
+        description=description,
+        tags=tags,
+    )
+
+    title = title.strip()
+    category = category.strip()
+    description = description.strip() if description is not None else None
+    tags = [tag.strip() for tag in tags] if tags is not None else None
+
+    # 2.2. Проверка фактического содержимого файла, а не только MIME от браузера.
+    await run_in_threadpool(
+        validate_file_content,
+        stream=upload.file,
+        content_type=content_type,
+        settings=s,
+    )
+    upload.file.seek(0)
 
     # 3. Serialize concurrent registrations of the same content on PostgreSQL.
     # The transaction-scoped advisory lock is held until the caller commits.
@@ -200,7 +237,7 @@ async def register_material(
     #    tags — PG varchar[]; asyncpg принимает python-list, sqlite3 (только для
     #    тестов) требует строковый литерал массива — нормализуем по диалекту.
     dialect = session.bind.dialect.name if session.bind is not None else "postgresql"
-    tags_list = [t[:50] for t in (tags or [])][:20]
+    tags_list = tags or []
     tags_param = (
         "{" + ",".join(t.replace('"', "").replace(",", "") for t in tags_list) + "}"
         if dialect == "sqlite"
@@ -229,9 +266,9 @@ async def register_material(
                 "id": str(material_id),
                 "registration_number": registration_number,
                 "author_id": str(author_id),
-                "title": title[:255],
+                "title": title,
                 "description": description,
-                "category": category[:100],
+                "category": category,
                 "tags": tags_param,
                 "sha256_hash": hash_res.sha256,
                 "file_s3_path": f"s3://{storage.bucket_files}/{object_key}",

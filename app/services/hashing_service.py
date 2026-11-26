@@ -27,36 +27,55 @@ def compute_sha256_from_bytes(data: bytes) -> HashResult:
     return HashResult(sha256=hashlib.sha256(data).hexdigest(), size_bytes=len(data))
 
 
-def compute_sha256_from_stream(stream, chunk_size: int = DEFAULT_CHUNK_SIZE) -> HashResult:
-    """SHA-256 для любого file-like объекта (UploadFile.file, открытый файл, BytesIO).
-
-    Потоковое чтение чанками `chunk_size`; позиция потока сбрасывается
-    в начало, чтобы сервис можно вызывать повторно (например, после чтения
-    заголовков pdfplumber'ом).
-    """
+def compute_sha256_from_stream(
+    stream,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    max_bytes: int | None = None,
+) -> HashResult:
+    """Вычисляет SHA-256 потоково, при необходимости ограничивая размер."""
     hasher = hashlib.sha256()
     total = 0
 
     try:
         stream.seek(0)
     except (OSError, ValueError):
-        pass  # не-ищущий поток — читаем как есть
-
-    while True:
-        chunk = stream.read(chunk_size)
-        if not chunk:
-            break
-        if isinstance(chunk, str):  # текстовый режим — нормализуем в utf-8
-            chunk = chunk.encode("utf-8")
-        hasher.update(chunk)
-        total += len(chunk)
-
-    try:
-        stream.seek(0)  # подготавливаем поток для последующей загрузки в S3
-    except (OSError, ValueError):
         pass
 
-    return HashResult(sha256=hasher.hexdigest(), size_bytes=total)
+    try:
+        while True:
+            read_size = chunk_size
+
+            if max_bytes is not None:
+                remaining = max_bytes - total
+                read_size = min(chunk_size, remaining + 1)
+
+            chunk = stream.read(read_size)
+
+            if not chunk:
+                break
+
+            if isinstance(chunk, str):
+                chunk = chunk.encode("utf-8")
+
+            total += len(chunk)
+
+            if max_bytes is not None and total > max_bytes:
+                raise ValueError(
+                    f"File exceeds the maximum allowed size of {max_bytes} bytes"
+                )
+
+            hasher.update(chunk)
+
+    finally:
+        try:
+            stream.seek(0)
+        except (OSError, ValueError):
+            pass
+
+    return HashResult(
+        sha256=hasher.hexdigest(),
+        size_bytes=total,
+    )
 
 
 def compute_sha256_from_path(path: str) -> HashResult:

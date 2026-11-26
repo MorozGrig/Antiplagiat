@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from datetime import datetime
+import hashlib
+from app.config import get_settings
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -126,3 +128,79 @@ async def verify_by_registration_number(
             detail="Публичная регистрация со свидетельством не найдена",
         )
     return await verify_certificate(certificate.certificate_number, session)
+
+@router.post(
+    "/file",
+    response_model=PublicVerificationResponse,
+    summary="Public verification by file SHA-256",
+)
+async def verify_by_file(
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_db),
+) -> PublicVerificationResponse:
+    """Verify a file against publicly available registered materials."""
+    settings = get_settings()
+    max_size = settings.max_file_size
+
+    sha256 = hashlib.sha256()
+    total_size = 0
+
+    while True:
+        chunk = await file.read(64 * 1024)
+        if not chunk:
+            break
+
+        total_size += len(chunk)
+
+        if total_size > max_size:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="File exceeds the maximum allowed size of 10 MB.",
+            )
+
+        sha256.update(chunk)
+
+    if total_size == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The uploaded file is empty.",
+        )
+
+    file_hash = sha256.hexdigest()
+
+    certificate = await session.scalar(
+        select(Certificate)
+        .join(Material, Certificate.material_id == Material.id)
+        .options(
+            joinedload(Certificate.material).joinedload(Material.author)
+        )
+        .where(
+            Material.sha256_hash == file_hash,
+            Material.is_public.is_(True),
+            Material.status == MaterialStatus.active,
+            Material.processing_status == ProcessingStatus.completed,
+            Material.uniqueness_score.is_not(None),
+            Certificate.status == CertificateStatus.valid,
+        )
+    )
+
+    if certificate is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No publicly verifiable material matching this file was found.",
+        )
+
+    material = certificate.material
+
+    return PublicVerificationResponse(
+        verified=True,
+        certificate_number=certificate.certificate_number,
+        registration_number=material.registration_number,
+        material_title=material.title,
+        category=material.category,
+        author_name=material.author.username,
+        sha256_hash=material.sha256_hash,
+        uniqueness_score=float(material.uniqueness_score),
+        issued_at=certificate.issued_at,
+        certificate_status=certificate.status.value,
+    )

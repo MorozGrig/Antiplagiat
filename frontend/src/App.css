@@ -2214,4 +2214,136 @@
   }
 }
 
+/* =================================
+   Публичная проверка свидетельства
+================================= */
 
+.verify-card {
+  max-width: 650px;
+}
+
+.verify-card .auth-icon {
+  margin-bottom: 20px;
+}
+
+.verify-card .auth-form select {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid #dce3ec;
+  border-radius: 10px;
+  outline: none;
+  background: #fff;
+  color: #172033;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.verify-card .auth-form select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.verify-card .auth-submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  cursor: pointer;
+}
+
+.verify-result {
+  margin-top: 28px;
+  padding: 24px;
+  border: 1px solid #dcefe7;
+  border-radius: 14px;
+  background: #f8fcfa;
+  color: #334155;
+}
+
+.verify-result > svg {
+  color: #059669;
+  margin-bottom: 10px;
+}
+
+.verify-result h2 {
+  margin: 0 0 20px;
+  color: #047857;
+  font-size: 20px;
+}
+
+.verify-result p {
+  margin: 11px 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.verify-result p strong {
+  color: #1e293b;
+}
+
+.verify-hash {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 13px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #fff;
+  color: #334155;
+  font-size: 11px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  white-space: normal;
+}
+
+.verify-disclaimer {
+  margin-top: 22px !important;
+  padding-top: 15px;
+  border-top: 1px solid #dcefe7;
+  color: #8290a4 !important;
+  font-size: 11px !important;
+}
+
+@media (max-width: 520px) {
+  .verify-card {
+    padding: 28px 20px;
+  }
+
+  .verify-result {
+    padding: 18px 14px;
+  }
+
+  .verify-result h2 {
+    font-size: 18px;
+  }
+}
+.verify-file-section {
+  margin-top: 24px;
+}
+
+.verify-file-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  color: var(--text-muted, #888);
+  font-size: 12px;
+}
+
+.verify-file-divider::before,
+.verify-file-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-color, #ddd);
+}
+
+.verify-file-section input[type="file"] {
+  width: 100%;
+  max-width: 100%;
+  padding: 10px;
+}

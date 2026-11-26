@@ -17,12 +17,15 @@ export default function LoginPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+
+    if (loading) return
+
     setError('')
     setLoading(true)
 
     try {
       const result = await login({
-        username_or_email: usernameOrEmail,
+        username_or_email: usernameOrEmail.trim(),
         password,
       })
 
@@ -59,15 +62,18 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="auth-form">
           <label htmlFor="username">Имя пользователя или email</label>
           <input
-            id="username"
-            type="text"
-            autoComplete="username"
-            value={usernameOrEmail}
-            onChange={(event) => setUsernameOrEmail(event.target.value)}
-            placeholder="Введите имя пользователя или email"
-            required
-            minLength={3}
-          />
+  id="username"
+  type="text"
+  autoComplete="username"
+  autoCapitalize="none"
+  spellCheck={false}
+  value={usernameOrEmail}
+  onChange={(event) => setUsernameOrEmail(event.target.value)}
+  placeholder="Введите имя пользователя или email"
+  required
+  minLength={3}
+  maxLength={100}
+/>
 
           <label htmlFor="password">Пароль</label>
           <input
@@ -78,6 +84,7 @@ export default function LoginPage() {
             onChange={(event) => setPassword(event.target.value)}
             placeholder="Введите пароль"
             required
+            maxLength={128}
           />
 
           {error && <div className="auth-error">{error}</div>}

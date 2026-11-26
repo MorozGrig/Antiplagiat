@@ -39,11 +39,7 @@ _MIME_EXT = {
 
 
 def _sanitize_ext(filename: Optional[str], content_type: str) -> str:
-    """Безопасное расширение: из имени файла (только [a-z0-9]{1,8}) или из MIME."""
-    if filename and "." in filename:
-        candidate = filename.rsplit(".", 1)[-1].lower()
-        if candidate.isalnum() and len(candidate) <= 8:
-            return candidate
+    """Возвращает расширение только на основании проверенного MIME-типа."""
     return _MIME_EXT.get(content_type, "bin")
 
 

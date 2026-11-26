@@ -1,4 +1,4 @@
-
+import VerifyPage from './pages/VerifyPage'
 import { useState } from 'react'
 import {
   ArrowRight,
@@ -108,6 +108,7 @@ function HomePage() {
             <a href="#features" onClick={closeMenu}>Возможности</a>
             <a href="#audience" onClick={closeMenu}>Кому подходит</a>
             <a href="#how-it-works" onClick={closeMenu}>Как это работает</a>
+            <Link to="/verify" onClick={closeMenu}>Проверить свидетельство</Link>
             <div className="mobile-nav-actions">
               {user ? (
   <>
@@ -465,6 +466,7 @@ function App() {
         path="/register"
         element={token && user ? <Navigate to="/dashboard" replace /> : <RegisterPage />}
       />
+      <Route path="/verify" element={<VerifyPage />} />
       <Route path="/dashboard" element={<ProtectedDashboard />} />
       <Route path="/admin" element={<ProtectedAdmin />} />
       <Route path="*" element={<Navigate to="/" replace />} />

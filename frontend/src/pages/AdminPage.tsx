@@ -26,6 +26,34 @@ import {
 } from '../services/api'
 
 type AdminTab = 'users' | 'materials'
+type UserStatus = 'active' | 'suspended' | 'banned'
+
+type MaterialStatus =
+  | 'active'
+  | 'on_moderation'
+  | 'archived'
+  | 'blocked'
+
+const USER_STATUSES: UserStatus[] = [
+  'active',
+  'suspended',
+  'banned',
+]
+
+const MATERIAL_STATUSES: MaterialStatus[] = [
+  'active',
+  'on_moderation',
+  'archived',
+  'blocked',
+]
+
+function isUserStatus(value: string): value is UserStatus {
+  return USER_STATUSES.includes(value as UserStatus)
+}
+
+function isMaterialStatus(value: string): value is MaterialStatus {
+  return MATERIAL_STATUSES.includes(value as MaterialStatus)
+}
 
 const userStatusLabels: Record<string, string> = {
   active: 'Активен',
@@ -51,7 +79,8 @@ export default function AdminPage() {
 
   const [userSearch, setUserSearch] = useState('')
   const [materialSearch, setMaterialSearch] = useState('')
-  const [materialStatusFilter, setMaterialStatusFilter] = useState('')
+  const [materialStatusFilter, setMaterialStatusFilter] =
+  useState<'' | MaterialStatus>('')
 
   const [loading, setLoading] = useState(true)
   const [usersLoading, setUsersLoading] = useState(false)
@@ -117,9 +146,10 @@ export default function AdminPage() {
 
   async function handleUserStatusChange(
     selectedUser: AdminUser,
-    newStatus: string,
+    newStatus: UserStatus,
   ) {
     if (!token || newStatus === selectedUser.status) return
+    if (!USER_STATUSES.includes(newStatus)) return
 
     const confirmed = window.confirm(
       `Изменить статус пользователя ${selectedUser.username} на «${userStatusLabels[newStatus]}»?`,
@@ -151,9 +181,10 @@ export default function AdminPage() {
 
   async function handleMaterialStatusChange(
     selectedMaterial: AdminMaterial,
-    newStatus: string,
+    newStatus: MaterialStatus,
   ) {
     if (!token || newStatus === selectedMaterial.status) return
+    if (!MATERIAL_STATUSES.includes(newStatus)) return
 
     const confirmed = window.confirm(
       `Изменить статус материала «${selectedMaterial.title}» на «${materialStatusLabels[newStatus]}»?`,
@@ -346,6 +377,7 @@ export default function AdminPage() {
               <Search size={18} />
               <input
                 type="search"
+                maxLength={100}
                 placeholder="Поиск по имени или email"
                 value={userSearch}
                 onChange={(event) => setUserSearch(event.target.value)}
@@ -385,9 +417,13 @@ export default function AdminPage() {
                           <select
                             value={item.status}
                             disabled={savingUserId === item.id || item.id === user?.id}
-                            onChange={(event) =>
-                              void handleUserStatusChange(item, event.target.value)
-                            }
+                            onChange={(event) => {
+  const value = event.target.value
+
+  if (isUserStatus(value)) {
+    void handleUserStatusChange(item, value)
+  }
+}}
                           >
                             <option value="active">Активен</option>
                             <option value="suspended">Приостановлен</option>
@@ -427,6 +463,7 @@ export default function AdminPage() {
               <Search size={18} />
               <input
                 type="search"
+                maxLength={100}
                 placeholder="Название или регистрационный номер"
                 value={materialSearch}
                 onChange={(event) => setMaterialSearch(event.target.value)}
@@ -448,8 +485,11 @@ export default function AdminPage() {
                 disabled={materialsLoading}
                 onChange={(event) => {
                   const value = event.target.value
-                  setMaterialStatusFilter(value)
-                  void loadMaterials(materialSearch, value)
+
+if (value === '' || isMaterialStatus(value)) {
+  setMaterialStatusFilter(value)
+  void loadMaterials(materialSearch, value)
+}
                 }}
               >
                 <option value="">Все статусы</option>
@@ -495,9 +535,13 @@ export default function AdminPage() {
                           <select
                             value={item.status}
                             disabled={savingMaterialId === item.id}
-                            onChange={(event) =>
-                              void handleMaterialStatusChange(item, event.target.value)
-                            }
+                            onChange={(event) => {
+  const value = event.target.value
+
+  if (isMaterialStatus(value)) {
+    void handleMaterialStatusChange(item, value)
+  }
+}}
                           >
                             {Object.entries(materialStatusLabels).map(([value, label]) => (
                               <option value={value} key={value}>{label}</option>

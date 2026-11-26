@@ -1,5 +1,5 @@
 
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   FileText,
@@ -22,6 +22,20 @@ import {
   type MaterialDetail,
 } from '../services/api'
 import '../App.css'
+const MAX_FILE_SIZE = 10 * 1024 * 1024
+
+const ALLOWED_FILE_EXTENSIONS = [
+  '.pdf',
+  '.docx',
+  '.txt',
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.mp4',
+  '.mov',
+  '.avi',
+  '.mkv',
+]
 
 
 function materialStatus(status: string) {
@@ -50,6 +64,7 @@ export default function DashboardPage() {
   const navigate = useNavigate()
 
   const [materials, setMaterials] = useState<MaterialItem[]>([])
+  const [materialsTotal, setMaterialsTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -66,6 +81,7 @@ export default function DashboardPage() {
   const [expandedMaterialId, setExpandedMaterialId] = useState<string | null>(null)
   const [materialDetails, setMaterialDetails] = useState<Record<string, MaterialDetail>>({})
   const [detailsLoading, setDetailsLoading] = useState<string | null>(null)
+  const detailsRequestId = useRef(0)
   const [detailsErrors, setDetailsErrors] = useState<Record<string, string>>({})
   const [certificateDownloading, setCertificateDownloading] = useState<string | null>(null)
 
@@ -103,8 +119,9 @@ async function handleDownloadCertificate(materialId: string) {
 
         const result = await getMaterials(token!)
         if (!cancelled) {
-          setMaterials(result.items)
-        }
+  setMaterials(result.items)
+  setMaterialsTotal(result.total)
+}
       } catch (err) {
         if (!cancelled) {
           setError(
@@ -127,75 +144,143 @@ async function handleDownloadCertificate(materialId: string) {
     }
   }, [token])
 
-  async function handleUpload(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+async function handleUpload(event: FormEvent<HTMLFormElement>) {
+  event.preventDefault()
 
-    if (!token || !file) {
-      setUploadError('Выберите файл для загрузки.')
-      return
+  if (uploading) return
+
+  if (!token || !file) {
+    setUploadError('Выберите файл для загрузки.')
+    return
+  }
+
+  const selectedFile = file
+
+  if (!title.trim()) {
+    setUploadError('Введите название материала.')
+    return
+  }
+
+  if (!category.trim()) {
+    setUploadError('Введите категорию материала.')
+    return
+  }
+
+  if (title.trim().length > 255 || category.trim().length > 100) {
+    setUploadError('Проверьте длину названия и категории.')
+    return
+  }
+
+  if (description.trim().length > 10000) {
+    setUploadError('Описание не должно превышать 10000 символов.')
+    return
+  }
+
+  if (selectedFile.size === 0) {
+    setUploadError('Выбран пустой файл.')
+    return
+  }
+
+  if (selectedFile.size > MAX_FILE_SIZE) {
+    setUploadError('Размер файла не должен превышать 10 МБ.')
+    return
+  }
+
+  const fileName = selectedFile.name.toLowerCase()
+  const hasAllowedExtension = ALLOWED_FILE_EXTENSIONS.some(
+    (extension) => fileName.endsWith(extension),
+  )
+
+  if (!hasAllowedExtension) {
+    setUploadError('Недопустимый формат файла.')
+    return
+  }
+
+  const tagsList = tags
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+
+  if (tagsList.length > 20) {
+    setUploadError('Можно указать не более 20 тегов.')
+    return
+  }
+
+  if (tagsList.some((tag) => tag.length > 50)) {
+    setUploadError('Длина каждого тега не должна превышать 50 символов.')
+    return
+  }
+
+  try {
+    setUploading(true)
+    setUploadError('')
+    setSuccessMessage('')
+
+    const result = await uploadMaterial(token, {
+      file: selectedFile,
+      title: title.trim(),
+      category: category.trim(),
+      description: description.trim(),
+      tags: tagsList,
+    })
+
+    setSuccessMessage(
+      `Материал зарегистрирован! Номер: ${result.registration_number}`,
+    )
+
+    setFile(null)
+    setTitle('')
+    setCategory('')
+    setDescription('')
+    setTags('')
+
+    const fileInput = document.getElementById(
+      'material-file',
+    ) as HTMLInputElement | null
+
+    if (fileInput) {
+      fileInput.value = ''
     }
 
     try {
-      setUploading(true)
-      setUploadError('')
-      setSuccessMessage('')
-
-      const result = await uploadMaterial(token, {
-        file,
-        title: title.trim(),
-        category: category.trim(),
-        description: description.trim(),
-        tags: tags
-          .split(',')
-          .map((tag) => tag.trim())
-          .filter(Boolean),
-      })
-
-      setSuccessMessage(
-        `Материал зарегистрирован! Номер: ${result.registration_number}`,
-      )
-
-      setFile(null)
-      setTitle('')
-      setCategory('')
-      setDescription('')
-      setTags('')
-
-      const fileInput = document.getElementById(
-        'material-file',
-      ) as HTMLInputElement | null
-
-      if (fileInput) {
-        fileInput.value = ''
-      }
-
-      const updatedMaterials = await getMaterials(token)
-      setMaterials(updatedMaterials.items)
-    } catch (err) {
-      setUploadError(
-        err instanceof Error
-          ? err.message
-          : 'Не удалось загрузить материал.',
-      )
-    } finally {
-      setUploading(false)
-    }
+  const updatedMaterials = await getMaterials(token)
+  setMaterials(updatedMaterials.items)
+setMaterialsTotal(updatedMaterials.total)
+} catch (refreshError) {
+  setError(
+    refreshError instanceof Error
+      ? `Материал зарегистрирован, но список не обновился: ${refreshError.message}`
+      : 'Материал зарегистрирован, но список не удалось обновить.',
+  )
+}
+  } catch (err) {
+    setUploadError(
+      err instanceof Error
+        ? err.message
+        : 'Не удалось загрузить материал.',
+    )
+  } finally {
+    setUploading(false)
   }
+}
 
-  
-  
 async function handleToggleMaterial(materialId: string) {
   if (expandedMaterialId === materialId) {
     setExpandedMaterialId(null)
+    detailsRequestId.current += 1
+    setDetailsLoading(null)
     return
   }
 
   setExpandedMaterialId(materialId)
 
-  // Если подробности уже загружены, повторный запрос не нужен.
   if (materialDetails[materialId] || !token) {
+    detailsRequestId.current += 1
+    setDetailsLoading(null)
     return
   }
+
+  const requestId = ++detailsRequestId.current
 
   try {
     setDetailsLoading(materialId)
@@ -212,15 +297,19 @@ async function handleToggleMaterial(materialId: string) {
       [materialId]: details,
     }))
   } catch (err) {
-    setDetailsErrors((previous) => ({
-      ...previous,
-      [materialId]:
-        err instanceof Error
-          ? err.message
-          : 'Не удалось загрузить результаты проверки.',
-    }))
+    if (detailsRequestId.current === requestId) {
+      setDetailsErrors((previous) => ({
+        ...previous,
+        [materialId]:
+          err instanceof Error
+            ? err.message
+            : 'Не удалось загрузить результаты проверки.',
+      }))
+    }
   } finally {
-    setDetailsLoading(null)
+    if (detailsRequestId.current === requestId) {
+      setDetailsLoading(null)
+    }
   }
 }
   
@@ -323,6 +412,7 @@ async function handleToggleMaterial(materialId: string) {
               value={tags}
               onChange={(event) => setTags(event.target.value)}
               placeholder="исследование, наука, статья"
+              maxLength={1100}
             />
             <small>Указывайте теги через запятую.</small>
 
@@ -330,10 +420,12 @@ async function handleToggleMaterial(materialId: string) {
             <input
               id="material-file"
               type="file"
+              accept=".pdf,.docx,.txt,.jpg,.jpeg,.png,.mp4,.mov,.avi,.mkv"
               onChange={(event) =>
                 setFile(event.target.files?.[0] || null)
               }
               required
+              disabled={uploading}
             />
 
             {file && <p>Выбран файл: {file.name}</p>}
@@ -361,7 +453,7 @@ async function handleToggleMaterial(materialId: string) {
 
     <div className="materials-total">
       <FileText size={18} />
-      <span>{materials.length} материалов</span>
+      <span>{materialsTotal} материалов</span>
     </div>
   </div>
 

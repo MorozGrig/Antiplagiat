@@ -20,10 +20,16 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 _passwords = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
+
 class RegisterRequest(BaseModel):
-    username: str = Field(min_length=3, max_length=50, pattern=r"^[A-Za-z0-9_.-]+$")
-    email: EmailStr
+    username: str = Field(
+        min_length=3,
+        max_length=50,
+        pattern=r"^(?=.*[A-Za-z0-9])[A-Za-z0-9_.-]+$",
+    )
+    email: EmailStr = Field(max_length=100)
     password: str = Field(min_length=10, max_length=128)
+
 
 
 class LoginRequest(BaseModel):

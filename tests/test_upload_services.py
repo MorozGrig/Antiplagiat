@@ -7,6 +7,7 @@
 
 import io
 from datetime import datetime, timezone
+from tests.pdf_fixtures import make_valid_pdf
 from uuid import uuid4
 
 import pytest
@@ -158,7 +159,7 @@ async def test_register_success_and_duplicate_rejected(session, monkeypatch):
     monkeypatch.setattr("app.services.material_service.generate_registration_number", fake_gen)
 
     storage = FakeStorage()
-    payload = b"%PDF-1.4 fake content"
+    payload = make_valid_pdf()
 
     result = await register_material(
         session=session, storage=storage, upload=_upload(payload),

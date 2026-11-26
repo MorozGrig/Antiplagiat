@@ -18,18 +18,24 @@ export default function RegisterPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (loading) return
     setError('')
     setLoading(true)
 
     try {
-      const result = await register({ username, email, password })
-      saveAuth(result)
-      navigate('/dashboard')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ошибка регистрации')
-    } finally {
-      setLoading(false)
-    }
+  const result = await register({
+    username: username.trim(),
+    email: email.trim().toLowerCase(),
+    password,
+  })
+
+  saveAuth(result)
+  navigate('/dashboard')
+} catch (err) {
+  setError(err instanceof Error ? err.message : 'Ошибка регистрации')
+} finally {
+  setLoading(false)
+}
   }
 
   return (
@@ -58,14 +64,16 @@ export default function RegisterPage() {
           <input
             id="username"
             type="text"
+            autoCapitalize="none"
+            spellCheck={false}
             autoComplete="username"
             value={username}
             onChange={(event) => setUsername(event.target.value)}
             placeholder="Например, ivan_petrov"
             minLength={3}
             maxLength={50}
-            pattern="[A-Za-z0-9_.-]+"
-            title="Используйте латинские буквы, цифры, точку, дефис или подчёркивание"
+            pattern="(?=.*[A-Za-z0-9])[A-Za-z0-9_.-]+"
+            title="Имя должно содержать хотя бы одну латинскую букву или цифру. Допустимы также точка, дефис и подчёркивание."
             required
           />
 
@@ -73,11 +81,14 @@ export default function RegisterPage() {
           <input
             id="email"
             type="email"
+            autoCapitalize="none"
+            spellCheck={false}
             autoComplete="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="name@example.com"
             required
+            maxLength={100}
           />
 
           <label htmlFor="password">Пароль</label>
