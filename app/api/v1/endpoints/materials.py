@@ -12,7 +12,7 @@ from app.api.dependencies import get_current_user
 from app.core.exceptions import AppError, DuplicateMaterialError
 from app.db.database import get_db
 from app.models.enums import UserRole
-from app.models.models import Material, User
+from app.models.models import Material, SimilarityCheck, User
 from app.schemas.materials import (
     DuplicateMaterialResponse,
     MaterialDetailResponse,
@@ -160,8 +160,43 @@ async def get_material(
     current_user: User = Depends(get_current_user),
 ) -> MaterialDetailResponse:
     material = await session.get(Material, material_id)
+
     if material is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Материал не найден")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Материал не найден",
+        )
+
     if material.author_id != current_user.id and current_user.role != UserRole.admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав")
-    return MaterialDetailResponse.model_validate(material)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Недостаточно прав",
+        )
+
+    query = (
+        select(SimilarityCheck, Material)
+        .join(
+            Material,
+            SimilarityCheck.matched_material_id == Material.id,
+        )
+        .where(SimilarityCheck.target_material_id == material_id)
+        .order_by(SimilarityCheck.similarity_percentage.desc())
+    )
+
+    result = await session.execute(query)
+    matches = result.all()
+
+    response = MaterialDetailResponse.model_validate(material)
+
+    response.similarity_matches = [
+        {
+            "matched_material_id": matched.id,
+            "matched_registration_number": matched.registration_number,
+            "matched_title": matched.title,
+            "similarity_percentage": float(check.similarity_percentage),
+            "check_method": check.check_method.value,
+        }
+        for check, matched in matches
+    ]
+
+    return response

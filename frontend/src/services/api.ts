@@ -83,6 +83,26 @@ export interface MaterialItem {
   created_at: string
 }
 
+
+export interface SimilarityMatch {
+  matched_material_id: string
+  matched_registration_number: string
+  matched_title: string
+  similarity_percentage: number
+  check_method: string
+}
+
+export interface MaterialDetail extends MaterialItem {
+  author_id: string
+  description: string | null
+  tags: string[] | null
+  sha256_hash: string
+  file_type: string
+  file_size_bytes: number
+  similarity_matches: SimilarityMatch[]
+}
+
+
 export interface MaterialListResponse {
   items: MaterialItem[]
   total: number
@@ -103,6 +123,18 @@ export function getMaterials(
       },
     },
   )
+}
+
+
+export function getMaterial(
+  token: string,
+  materialId: string,
+): Promise<MaterialDetail> {
+  return request<MaterialDetail>(`/materials/${materialId}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
 }
 
 

@@ -7,12 +7,18 @@ import {
   ShieldCheck,
   User,
   Upload,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  LoaderCircle,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import {
   getMaterials,
+  getMaterial,
   uploadMaterial,
   type MaterialItem,
+  type MaterialDetail,
 } from '../services/api'
 import '../App.css'
 
@@ -52,6 +58,11 @@ export default function DashboardPage() {
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+
+  const [expandedMaterialId, setExpandedMaterialId] = useState<string | null>(null)
+  const [materialDetails, setMaterialDetails] = useState<Record<string, MaterialDetail>>({})
+  const [detailsLoading, setDetailsLoading] = useState<string | null>(null)
+  const [detailsErrors, setDetailsErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (!token) {
@@ -147,6 +158,48 @@ export default function DashboardPage() {
     }
   }
 
+  
+  
+async function handleToggleMaterial(materialId: string) {
+  if (expandedMaterialId === materialId) {
+    setExpandedMaterialId(null)
+    return
+  }
+
+  setExpandedMaterialId(materialId)
+
+  // Если подробности уже загружены, повторный запрос не нужен.
+  if (materialDetails[materialId] || !token) {
+    return
+  }
+
+  try {
+    setDetailsLoading(materialId)
+
+    setDetailsErrors((previous) => ({
+      ...previous,
+      [materialId]: '',
+    }))
+
+    const details = await getMaterial(token, materialId)
+
+    setMaterialDetails((previous) => ({
+      ...previous,
+      [materialId]: details,
+    }))
+  } catch (err) {
+    setDetailsErrors((previous) => ({
+      ...previous,
+      [materialId]:
+        err instanceof Error
+          ? err.message
+          : 'Не удалось загрузить результаты проверки.',
+    }))
+  } finally {
+    setDetailsLoading(null)
+  }
+}
+  
   function handleLogout() {
     logout()
     navigate('/')
@@ -262,49 +315,172 @@ export default function DashboardPage() {
           </form>
         </div>
 
-        <div className="dashboard-placeholder">
-          <div className="dashboard-placeholder-icon">
-            <FileText size={27} />
-          </div>
 
-          <h2>Ваши материалы</h2>
+<div className="materials-section">
+  <div className="materials-section-heading">
+    <div>
+      <span className="materials-section-kicker">МОЯ БИБЛИОТЕКА</span>
+      <h2>Ваши материалы</h2>
+      <p>Зарегистрированные работы и результаты проверки уникальности.</p>
+    </div>
 
-          {loading && <p>Загружаем материалы...</p>}
+    <div className="materials-total">
+      <FileText size={18} />
+      <span>{materials.length} материалов</span>
+    </div>
+  </div>
 
-          {error && <p>{error}</p>}
+  {loading && (
+    <p className="materials-message">Загружаем материалы...</p>
+  )}
 
-          {!loading && !error && materials.length === 0 && (
-            <p>Пока у вас нет зарегистрированных материалов.</p>
-          )}
+  {error && (
+    <p className="materials-error">{error}</p>
+  )}
 
-          {!loading && !error && materials.length > 0 && (
-            <div className="materials-list">
-              <p>Всего материалов: {materials.length}</p>
+  {!loading && !error && materials.length === 0 && (
+    <div className="materials-empty">
+      <FileText size={34} />
+      <h3>Пока здесь пусто</h3>
+      <p>Зарегистрируйте первый авторский материал, чтобы увидеть его в этом разделе.</p>
+    </div>
+  )}
 
-              {materials.map((material) => (
-                <article className="material-card" key={material.id}>
+  {!loading && !error && materials.length > 0 && (
+    <div className="materials-list">
+      {materials.map((material) => {
+        const isExpanded = expandedMaterialId === material.id
+        const details = materialDetails[material.id]
+        const isDetailsLoading = detailsLoading === material.id
+        const detailsError = detailsErrors[material.id]
+
+        const uniqueness = material.uniqueness_score
+        const uniquenessValue =
+          uniqueness == null
+            ? null
+            : Math.min(100, Math.max(0, uniqueness))
+
+        return (
+          <article className="material-card" key={material.id}>
+            <div className="material-card-main">
+              <div className="material-card-icon">
+                <FileText size={23} />
+              </div>
+
+              <div className="material-card-content">
+                <div className="material-card-title-row">
                   <h3>{material.title}</h3>
-                  <p>Номер регистрации: {material.registration_number}</p>
-                  <p>Категория: {material.category}</p>
-                  <p>Статус: {materialStatus(material.status)}</p>
-                  <p>
-                    Проверка: {processingStatus(material.processing_status)}
-                  </p>
-                  <p>
-                    Уникальность:{' '}
-                    {material.uniqueness_score != null
-                      ? `${material.uniqueness_score}%`
-                      : 'Ещё не определена'}
-                  </p>
-                  <p>
-                    Дата регистрации:{' '}
+
+                  <span className={`material-status status-${material.status}`}>
+                    {materialStatus(material.status)}
+                  </span>
+                </div>
+
+                <div className="material-card-meta">
+                  <span>№ {material.registration_number}</span>
+                  <span>{material.category}</span>
+                  <span>
                     {new Date(material.created_at).toLocaleDateString('ru-RU')}
-                  </p>
-                </article>
-              ))}
+                  </span>
+                </div>
+
+                <div className="material-processing">
+                  <span className={`processing-indicator processing-${material.processing_status}`} />
+                  {processingStatus(material.processing_status)}
+                </div>
+
+                <div className="material-uniqueness">
+                  <div className="material-uniqueness-heading">
+                    <span>Уникальность текста</span>
+                    <strong>
+                      {uniquenessValue == null
+                        ? 'Ожидается проверка'
+                        : `${uniquenessValue.toFixed(2)}%`}
+                    </strong>
+                  </div>
+
+                  <div className="material-progress-track">
+                    <div
+                      className="material-progress-fill"
+                      style={{
+                        width: `${uniquenessValue ?? 0}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {material.processing_status === 'completed' && (
+                  <button
+                    type="button"
+                    className="material-details-button"
+                    onClick={() => handleToggleMaterial(material.id)}
+                  >
+                    <Search size={16} />
+                    {isExpanded ? 'Скрыть результаты' : 'Посмотреть совпадения'}
+                    {isExpanded
+                      ? <ChevronUp size={17} />
+                      : <ChevronDown size={17} />}
+                  </button>
+                )}
+              </div>
             </div>
-          )}
-        </div>
+
+            {isExpanded && (
+              <div className="material-details">
+                {isDetailsLoading && (
+                  <p className="material-details-message">
+                    <LoaderCircle size={17} className="material-spinner" />
+                    Загружаем результаты проверки...
+                  </p>
+                )}
+
+                {detailsError && (
+                  <p className="material-details-error">{detailsError}</p>
+                )}
+
+                {details && !isDetailsLoading && (
+                  <>
+                    <h4>Найденные совпадения</h4>
+
+                    {details.similarity_matches.length === 0 ? (
+                      <p className="material-no-matches">
+                        Совпадений с другими зарегистрированными материалами не обнаружено.
+                      </p>
+                    ) : (
+                      <div className="similarity-list">
+                        {details.similarity_matches.map((match) => (
+                          <div
+                            className="similarity-item"
+                            key={match.matched_material_id}
+                          >
+                            <div className="similarity-item-info">
+                              <strong>{match.matched_title}</strong>
+                              <span>
+                                № {match.matched_registration_number}
+                              </span>
+                              <small>
+                                Метод проверки: {match.check_method}
+                              </small>
+                            </div>
+
+                            <div className="similarity-percentage">
+                              {match.similarity_percentage.toFixed(2)}%
+                              <span>сходства</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </article>
+        )
+      })}
+    </div>
+  )}
+</div>
       </section>
     </main>
   )

@@ -17,6 +17,12 @@ class MaterialRegistrationResponse(BaseModel):
     created_at: datetime
     task_id: str | None = None
 
+class SimilarityMatchResponse(BaseModel):
+    matched_material_id: UUID
+    matched_registration_number: str
+    matched_title: str
+    similarity_percentage: float
+    check_method: str
 
 class MaterialDetailResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -35,6 +41,7 @@ class MaterialDetailResponse(BaseModel):
     processing_status: str
     uniqueness_score: float | None = None
     created_at: datetime
+    similarity_matches: list[SimilarityMatchResponse] = Field(default_factory=list)
 
 
 class DuplicateMaterialResponse(BaseModel):
