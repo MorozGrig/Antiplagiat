@@ -1,3 +1,4 @@
+
 """Python-аналоги ENUM-типов PostgreSQL (CREATE TYPE ... AS ENUM).
 
 Имена значений строго соответствуют схеме БД.
@@ -12,7 +13,6 @@ import enum
 
 class UserRole(str, enum.Enum):
     user = "user"
-    expert = "expert"
     admin = "admin"
 
 
@@ -27,7 +27,6 @@ class MaterialStatus(str, enum.Enum):
     on_moderation = "on_moderation"
     archived = "archived"
     blocked = "blocked"
-    duplicate = "duplicate"
 
 
 class ProcessingStatus(str, enum.Enum):

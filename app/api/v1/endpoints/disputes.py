@@ -105,7 +105,7 @@ async def get_dispute(
     dispute = await session.get(CopyrightDispute, dispute_id)
     if dispute is None:
         raise HTTPException(status_code=404, detail="Спор не найден")
-    if dispute.complainant_id != current_user.id and current_user.role.value not in ("expert", "admin"):
+    if dispute.complainant_id != current_user.id and current_user.role.value != "admin":
         raise HTTPException(status_code=403, detail="Недостаточно прав для просмотра спора")
     return DisputeResponse.model_validate(dispute)
 

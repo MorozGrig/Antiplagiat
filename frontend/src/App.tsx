@@ -27,6 +27,7 @@ import './App.css'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import DashboardPage from './pages/DashboardPage'
+import AdminPage from './pages/AdminPage'
 import { useAuth } from './context/AuthContext'
 
 const features = [
@@ -109,10 +110,17 @@ function HomePage() {
             <a href="#how-it-works" onClick={closeMenu}>Как это работает</a>
             <div className="mobile-nav-actions">
               {user ? (
-                <Link className="button button-primary" to="/dashboard" onClick={closeMenu}>
-                  Личный кабинет <ArrowRight size={16} />
-                </Link>
-              ) : (
+  <>
+    {user.role === 'admin' && (
+      <Link className="button button-outline" to="/admin" onClick={closeMenu}>
+        Админ-панель
+      </Link>
+    )}
+    <Link className="button button-primary" to="/dashboard" onClick={closeMenu}>
+      Личный кабинет <ArrowRight size={16} />
+    </Link>
+  </>
+) : (
                 <>
                   <Link className="button button-outline" to="/login" onClick={closeMenu}>
                     Войти
@@ -127,10 +135,17 @@ function HomePage() {
 
           <div className="header-actions">
             {user ? (
-              <Link className="button button-primary button-small" to="/dashboard">
-                Личный кабинет <ArrowRight size={16} />
-              </Link>
-            ) : (
+  <>
+    {user.role === 'admin' && (
+      <Link className="button button-outline button-small" to="/admin">
+        Админ-панель
+      </Link>
+    )}
+    <Link className="button button-primary button-small" to="/dashboard">
+      Личный кабинет <ArrowRight size={16} />
+    </Link>
+  </>
+) : (
               <>
                 <Link className="button button-text" to="/login">Войти</Link>
                 <Link className="button button-primary button-small" to="/register">
@@ -422,6 +437,20 @@ function ProtectedDashboard() {
   return <DashboardPage />
 }
 
+function ProtectedAdmin() {
+  const { user, token } = useAuth()
+
+  if (!token || !user) {
+    return <Navigate to="/login" replace />
+  }
+
+  if (user.role !== 'admin') {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  return <AdminPage />
+}
+
 function App() {
   const { user, token } = useAuth()
 
@@ -437,6 +466,7 @@ function App() {
         element={token && user ? <Navigate to="/dashboard" replace /> : <RegisterPage />}
       />
       <Route path="/dashboard" element={<ProtectedDashboard />} />
+      <Route path="/admin" element={<ProtectedAdmin />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

@@ -124,6 +124,10 @@ def _ocr_pdf(file_path: str | Path) -> str:
     try:
         import pdfplumber
         import pytesseract
+
+        pytesseract.pytesseract.tesseract_cmd = (
+            r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+        )
     except ImportError as exc:  # pragma: no cover - environment dependent
         raise RuntimeError(
             "Для OCR PDF установите pdfplumber, pytesseract и Tesseract OCR"

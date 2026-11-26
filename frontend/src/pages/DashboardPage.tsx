@@ -22,14 +22,17 @@ import {
 } from '../services/api'
 import '../App.css'
 
+
 function materialStatus(status: string) {
   const statuses: Record<string, string> = {
     on_moderation: 'На модерации',
-    approved: 'Одобрен',
-    rejected: 'Отклонён',
+    active: 'Активен',
+    archived: 'В архиве',
+    blocked: 'Заблокирован',
   }
   return statuses[status] || status
 }
+
 
 function processingStatus(status: string) {
   const statuses: Record<string, string> = {
@@ -207,19 +210,30 @@ async function handleToggleMaterial(materialId: string) {
 
   return (
     <main className="dashboard-page">
-      <header className="dashboard-header">
-        <Link to="/" className="brand">
-          <span className="brand-mark">
-            <ShieldCheck size={21} />
-          </span>
-          АвторРеестр
-        </Link>
 
-        <button className="dashboard-logout" onClick={handleLogout}>
-          <LogOut size={17} />
-          Выйти
-        </button>
-      </header>
+<header className="dashboard-header">
+  <Link to="/" className="brand">
+    <span className="brand-mark">
+      <ShieldCheck size={21} />
+    </span>
+    АвторРеестр
+  </Link>
+
+  <div className="dashboard-header-actions">
+    {user?.role === 'admin' && (
+      <Link to="/admin" className="button button-primary">
+        <ShieldCheck size={17} />
+        Админ-панель
+      </Link>
+    )}
+
+    <button className="dashboard-logout" onClick={handleLogout}>
+      <LogOut size={17} />
+      Выйти
+    </button>
+  </div>
+</header>
+
 
       <section className="dashboard-content">
         <p className="eyebrow">ЛИЧНЫЙ КАБИНЕТ</p>
