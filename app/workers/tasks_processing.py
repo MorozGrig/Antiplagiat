@@ -309,7 +309,7 @@ def process_material(self, material_id: str) -> dict[str, Any]:
             _write_log(session, material_uuid, "pipeline", "completed")
             logger.info("Material %s processing completed", material_id)
 
-            return {
+            success_result = {
                 "material_id": str(material_uuid),
                 "processing_status": ProcessingStatus.completed.value,
                 "uniqueness_score": float(material.uniqueness_score),
@@ -350,3 +350,18 @@ def process_material(self, material_id: str) -> dict[str, Any]:
                 "processing_status": ProcessingStatus.failed.value,
                 "error": error_text,
             }
+    # Generate the certificate only after the processing transaction commits.
+    try:
+        from app.services.certificate_service import generate_certificate
+
+        with get_sync_session() as certificate_session:
+            generate_certificate(certificate_session, material_uuid)
+
+        logger.info("Certificate generated for material %s", material_id)
+    except Exception:
+        # Certificate generation failure must not undo successful processing.
+        logger.exception(
+            "Could not generate certificate for material %s", material_id
+        )
+
+    return success_result

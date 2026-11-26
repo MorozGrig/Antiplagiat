@@ -17,6 +17,7 @@ import {
   getMaterials,
   getMaterial,
   uploadMaterial,
+  downloadMaterialCertificate,
   type MaterialItem,
   type MaterialDetail,
 } from '../services/api'
@@ -66,6 +67,26 @@ export default function DashboardPage() {
   const [materialDetails, setMaterialDetails] = useState<Record<string, MaterialDetail>>({})
   const [detailsLoading, setDetailsLoading] = useState<string | null>(null)
   const [detailsErrors, setDetailsErrors] = useState<Record<string, string>>({})
+  const [certificateDownloading, setCertificateDownloading] = useState<string | null>(null)
+
+async function handleDownloadCertificate(materialId: string) {
+  if (!token) return
+
+  try {
+    setCertificateDownloading(materialId)
+    await downloadMaterialCertificate(token, materialId)
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : 'Не удалось скачать сертификат'
+
+    setDetailsErrors((prev) => ({
+      ...prev,
+      [materialId]: message,
+    }))
+  } finally {
+    setCertificateDownloading(null)
+  }
+}
 
   useEffect(() => {
     if (!token) {
@@ -454,7 +475,25 @@ async function handleToggleMaterial(materialId: string) {
 
                 {details && !isDetailsLoading && (
                   <>
-                    <h4>Найденные совпадения</h4>
+  {details.certificate_number && details.certificate_status === 'valid' && (
+    <button
+      type="button"
+      className="material-details-button"
+      onClick={() => handleDownloadCertificate(material.id)}
+      disabled={certificateDownloading === material.id}
+    >
+      {certificateDownloading === material.id ? (
+        <LoaderCircle size={16} className="material-spinner" />
+      ) : (
+        <FileText size={16} />
+      )}
+      {certificateDownloading === material.id
+        ? 'Скачивание...'
+        : 'Скачать свидетельство PDF'}
+    </button>
+  )}
+
+  <h4>Найденные совпадения</h4>
 
                     {details.similarity_matches.length === 0 ? (
                       <p className="material-no-matches">

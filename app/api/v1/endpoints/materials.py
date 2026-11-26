@@ -1,18 +1,20 @@
 """Material registration and lookup API routes."""
 from __future__ import annotations
 from sqlalchemy import func, select
+from urllib.parse import urlparse
 
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_user
 from app.core.exceptions import AppError, DuplicateMaterialError
 from app.db.database import get_db
 from app.models.enums import UserRole
-from app.models.models import Material, SimilarityCheck, User
+from app.models.models import Certificate, Material, SimilarityCheck, User
 from app.schemas.materials import (
     DuplicateMaterialResponse,
     MaterialDetailResponse,
@@ -150,6 +152,75 @@ async def list_materials(
     )
 
 @router.get(
+    "/{material_id}/certificate/download",
+    summary="Скачать PDF-свидетельство о проверке уникальности",
+)
+async def download_material_certificate(
+    material_id: UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    storage: StorageService = Depends(get_storage_service),
+) -> Response:
+    material = await session.get(Material, material_id)
+
+    if material is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Материал не найден",
+        )
+
+    if material.author_id != current_user.id and current_user.role != UserRole.admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Недостаточно прав",
+        )
+
+    certificate = await session.scalar(
+        select(Certificate).where(Certificate.material_id == material_id)
+    )
+
+    if certificate is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Сертификат ещё не создан",
+        )
+
+    if certificate.status.value != "valid":
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="Сертификат отозван",
+        )
+
+    parsed_path = urlparse(certificate.pdf_s3_path)
+    if parsed_path.scheme != "s3" or not parsed_path.netloc or not parsed_path.path.lstrip("/"):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Некорректный путь к файлу сертификата",
+        )
+
+    try:
+        pdf_bytes = await run_in_threadpool(
+            storage.download_bytes,
+            key=parsed_path.path.lstrip("/"),
+            bucket=parsed_path.netloc,
+        )
+    except Exception:
+        logger.exception("Could not download certificate for material %s", material_id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Не удалось получить файл сертификата из хранилища",
+        )
+
+    filename = f"certificate-{certificate.certificate_number}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+@router.get(
     "/{material_id}",
     response_model=MaterialDetailResponse,
     summary="Получить сведения о материале",
@@ -187,6 +258,14 @@ async def get_material(
     matches = result.all()
 
     response = MaterialDetailResponse.model_validate(material)
+    certificate = await session.scalar(
+        select(Certificate).where(Certificate.material_id == material_id)
+    )
+
+    if certificate is not None:
+        response.certificate_number = certificate.certificate_number
+        response.certificate_issued_at = certificate.issued_at
+        response.certificate_status = certificate.status.value
 
     response.similarity_matches = [
         {

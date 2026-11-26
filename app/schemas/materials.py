@@ -40,6 +40,9 @@ class MaterialDetailResponse(BaseModel):
     status: str
     processing_status: str
     uniqueness_score: float | None = None
+    certificate_number: str | None = None
+    certificate_issued_at: datetime | None = None
+    certificate_status: str | None = None
     created_at: datetime
     similarity_matches: list[SimilarityMatchResponse] = Field(default_factory=list)
 

@@ -13,7 +13,6 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.orm import joinedload
 
 from app.models.enums import CertificateStatus, ProcessingStatus
 from app.models.models import Certificate, Material
@@ -51,6 +50,12 @@ def _render_certificate_pdf(
 ) -> bytes:
     """Render a self-contained A4 PDF document using WeasyPrint."""
     try:
+        import os
+
+        gtk_bin = r"C:\msys64\ucrt64\bin"
+        if os.path.isdir(gtk_bin):
+            os.add_dll_directory(gtk_bin)
+
         from weasyprint import HTML
     except ImportError as exc:  # pragma: no cover - environment dependent
         raise CertificateGenerationError(
@@ -157,9 +162,8 @@ def generate_certificate(
     # Lock the material row to reduce concurrent issuance races.
     material = session.scalar(
         select(Material)
-        .options(joinedload(Material.author))
         .where(Material.id == material_uuid)
-        .with_for_update()
+        .with_for_update(of=Material)
     )
     if material is None:
         raise CertificateGenerationError(f"Материал {material_uuid} не найден")

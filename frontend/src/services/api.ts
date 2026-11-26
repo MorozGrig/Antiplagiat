@@ -108,6 +108,9 @@ export interface MaterialDetail extends MaterialItem {
   file_type: string
   file_size_bytes: number
   similarity_matches: SimilarityMatch[]
+  certificate_number: string | null
+  certificate_issued_at: string | null
+  certificate_status: string | null
 }
 
 
@@ -145,6 +148,43 @@ export function getMaterial(
   })
 }
 
+export async function downloadMaterialCertificate(
+  token: string,
+  materialId: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/materials/${materialId}/certificate/download`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  )
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null)
+    const detail = data?.detail
+
+    const message =
+      typeof detail === 'string'
+        ? detail
+        : `Ошибка скачивания сертификата: ${response.status}`
+
+    throw new Error(message)
+  }
+
+  const blob = await response.blob()
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+
+  link.href = url
+  link.download = `certificate-${materialId}.pdf`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+
+  URL.revokeObjectURL(url)
+}
 
 export interface MaterialRegistrationResponse {
   material_id: string
