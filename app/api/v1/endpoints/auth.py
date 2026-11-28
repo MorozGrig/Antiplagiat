@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from passlib.context import CryptContext
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from jose import jwt
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
@@ -25,10 +25,19 @@ class RegisterRequest(BaseModel):
     username: str = Field(
         min_length=3,
         max_length=50,
-        pattern=r"^(?=.*[A-Za-z0-9])[A-Za-z0-9_.-]+$",
+        pattern=r"^[A-Za-z0-9_.-]+$",
     )
     email: EmailStr = Field(max_length=100)
     password: str = Field(min_length=10, max_length=128)
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, value: str) -> str:
+        if not any(char.isascii() and char.isalnum() for char in value):
+            raise ValueError(
+                "Имя должно содержать хотя бы одну латинскую букву или цифру."
+            )
+        return value
 
 
 
